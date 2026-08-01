@@ -4,7 +4,7 @@
   <img src="docs/screenshot.png" alt="xharness GUI" width="880" />
 </p>
 
-用 TypeScript 实现的 coding agent harness（类 Claude Code 的 MVP），提供终端 CLI 与 macOS 桌面 GUI 两种形态：模型自主地**读代码 → 改代码 → 跑命令验证**，直到任务完成。走 Anthropic Messages API 格式（`@anthropic-ai/sdk`，流式输出），默认对接 DeepSeek 的 Anthropic 兼容端点，端点与模型完全可配（已内置 DeepSeek / 可添加 Kimi 等任意兼容供应商）。
+用 TypeScript 实现的 coding agent harness，提供终端 CLI 与 macOS 桌面 GUI 两种形态：模型自主地**读代码 → 改代码 → 跑命令验证**，直到任务完成。走 Anthropic Messages API 格式（`@anthropic-ai/sdk`，流式输出），默认对接 DeepSeek 的 Anthropic 兼容端点，端点与模型完全可配（已内置 DeepSeek / 可添加 Kimi 等任意兼容供应商）。
 
 ## 安装
 
