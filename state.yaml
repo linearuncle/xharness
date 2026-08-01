@@ -1,0 +1,109 @@
+# GoalBuddy 任务板 — xharness MVP（目标见 GOAL.md）
+# PM 维护；Scout/Worker/Judge 回执粘贴于各任务 receipt 字段
+
+goal: 按 GOAL.md 实现 xharness MVP，六个 tranche 出口全绿
+status: in_progress
+environment:
+  node: v22.23.1
+  npm: 10.9.8
+  ripgrep: 15.1.0
+  deepseek_key: present (DEEPSEEK_API_KEY)
+
+tranches:
+  T0:
+    title: 脚手架
+    status: done_pending_judge
+    tasks:
+      - id: T0.1
+        kind: worker
+        title: 项目脚手架：package.json(bin+scripts)、tsconfig、vitest(unit/e2e 分 project)、目录骨架、config.ts loadConfig()
+        allowed_files: [package.json, tsconfig.json, vitest.config.ts, .gitignore, src/**, test/**]
+        verify: [npm run build, npx tsc --noEmit, npm test, node dist/index.js --version]
+        status: done
+        receipt: |
+          result: done. commit 0eb3f05. build/tsc/test/--version 全 pass（unit 4/4）。
+          loadConfig 覆盖 key 校验/默认端点模型/上下文窗口表/rg 硬依赖检测。
+          骨架文件均 export{} 占位，仅 config.ts 与 index.ts 有实现。无 blocker。
+      - id: T0.2
+        kind: worker(PM 代执行，Judge 预授权)
+        title: index.ts 补 shebang 修复 bin 执行
+        status: done
+        receipt: commit 0cbb4ec，./dist/index.js --version 输出 0.1.0，预授权条件达成
+    judge: |
+      approve（经 T0.2 预授权路径）。Judge 现场复跑全部验证；发现 shebang 缺陷（bin 无法执行）
+      即 T0.2，修复自验通过即 approve。config.ts 符合 §2 全部决策、无 process.env 泄漏、
+      骨架与 §3 一致、依赖未越界。教训写入 Worker 约定：验证必须覆盖 bin 真实执行语义。
+  T1:
+    title: 工具层 F5-F10 + registry
+    status: active
+    tasks:
+      - id: T1.1
+        kind: worker
+        title: F5-F10 六工具 + Tool 接口 + registry（追加注册、无特判、不含 Skill），各带单测
+        allowed_files: [src/tools/**, src/types/tools.ts, test/unit/**]
+        verify: [npm run build, npx tsc --noEmit, npm test]
+        status: done
+        receipt: |
+          result: done. commit 5e40637。build/tsc/test 全 pass（8 文件 32 用例）。
+          六工具规格齐（bash 进程组杀/截断、read 行号、edit 唯一匹配含次数、grep rg 硬依赖、
+          glob 用 Node22 自带 fs.glob 零新增依赖、registry 无特判可追加）。
+          PM 备案两点：fs.glob 为 experimental（22.23.1 实测正常）；
+          bash 非零退出码按 Claude Code 惯例标 isError（GOAL 未明文，PM 认可此默认）。
+      - id: T1.2
+        kind: worker(PM 代执行，Judge 布置)
+        title: Node 下限升至 22（engines + GOAL.md §2）
+        status: done
+        receipt: commit f38c46a，测试仍全绿
+    judge: |
+      approve。现场复跑全绿；规格逐条核对通过；分层铁律零违规；单测质量合格。
+      裁决：a) fs.glob 有条件批准，Node 下限升 22（即 T1.2）；b) bash 非零退出码
+      标 isError 定为既定语义，后续不得改。
+      设计备忘（T3 用）：bashTool 需在 F18 实现时扩展 AbortSignal 中断句柄以支持
+      Ctrl+C SIGTERM 进程组；当前超时 SIGKILL 可接受。
+  T2:
+    title: 引擎 F1-F3 + api/client + types
+    status: active
+    tasks:
+      - id: T2.1
+        kind: worker
+        title: types/messages + api/client（流式/重试/领域事件）+ prompts（注入钩子）+ loop（串行/上限/中断），mock 单测
+        allowed_files: [src/api/**, src/types/messages.ts, src/agent/loop.ts, src/agent/prompts.ts, src/session/history.ts, src/index.ts, test/unit/**]
+        verify: [npm run build, npx tsc --noEmit, npm test]
+        status: done
+        receipt: |
+          result: done. commit e6d3276。build/tsc/test 全 pass（51/51，新增 19）。
+          铁律已守（loop 无 SDK/env/原始流）；client 可注入 fake 流；重试 1s/2s/4s 仅幂等场景；
+          中断丢弃未完成、保留已回填、加中断标记；上限触顶剩余 tool_use 以 is_error 占位回填
+          保持 API 合法。index 增 -p 一次性冒烟通道。
+          Worker 备忘：1) 中断时未执行 tool_use 不补占位（F1 字面语义，下轮 API 可能配对报错）；
+          2) Bash SIGTERM 联动留 T3。
+      - id: T2.2
+        kind: pm
+        title: T2 出口冒烟（真实 DeepSeek 端点）
+        status: done
+        receipt: |
+          沙箱目录跑 xharness -p "创建 hello.txt→Read 确认→汇报"，模型实际调用 Write、Read
+          两工具，产物正确，exit 0。DeepSeek v4-pro 默认端点直连成功。
+      - id: T2.3
+        kind: worker(续用 T2.1 Worker 上下文)
+        title: 中断路径为未执行 tool_use 回填占位 tool_result（Judge 裁决），附配对完整性单测
+        allowed_files: [src/agent/loop.ts, test/unit/loop.test.ts]
+        verify: [npm run build, npx tsc --noEmit, npm test]
+        status: active
+        receipt: null
+    judge: |
+      conditional approve。现场复验：51/51 绿、铁律零违规、F1/F2/F3 规格合规、
+      冒烟由 Judge 亲自复跑通过（真实 DeepSeek 端点 Write+Read）。
+      裁决：触顶占位回填正式接受为既定语义；备忘 1 判缺陷→T2.3（中断路径同构占位回填，
+      PM 验证全绿即解锁 T3，无需回 Judge）；备忘 2（SIGTERM 留 T3）接受。
+      Worker 约定追加：history 的 tool_use/tool_result 配对合法性是硬约束，
+      "字面遵循 GOAL 但产出非法 history" 的取舍必须升级 Judge，不得备忘自行落地。
+  T3:
+    title: 交互 F17/F18/F11/F11b
+    status: pending
+  T4:
+    title: 上下文 F4 compact + F12 AGENTS.md
+    status: pending
+  T5:
+    title: 技能 F13-F16 + Skill 元工具
+    status: pending
