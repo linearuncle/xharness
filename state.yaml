@@ -2,7 +2,7 @@
 # PM 维护；Scout/Worker/Judge 回执粘贴于各任务 receipt 字段
 
 goal: 按 GOAL.md 实现 xharness MVP，六个 tranche 出口全绿
-status: in_progress
+status: done  # §8 四条标准全部满足，Judge 于 2026-08-01 现场终审通过
 environment:
   node: v22.23.1
   npm: 10.9.8
@@ -201,7 +201,7 @@ tranches:
       既定语义：技能覆盖以 frontmatter name（缺目录名兜底）为键，项目级后写覆盖。
   T6:
     title: 收尾（Judge 布置 G1-G4）
-    status: active
+    status: done
     tasks:
       - id: G1
         kind: worker
@@ -243,7 +243,13 @@ tranches:
           无官方 Anthropic key，改用本地一次性 HTTP 服务验证机制：
           ANTHROPIC_BASE_URL=http://127.0.0.1:39871 时请求实际命中该端点
           （HIT: POST /v1/messages），错误体正确透传。覆盖机制可用。
-    judge: pending
+    judge: |
+      goal 终审 approve（2026-08-01）。§8 四条现场亲验全过：六 tranche 出口齐、
+      build/tsc/unit 125/E2E 5 全绿、G3 演示证据充分（herdr TTY 满足 T3 条件项实质）、
+      README 八项与代码一致（B1 已入）。E2E 套件补审合格（沙箱/skip/审计/子序列断言）。
+      git 干净、铁律终扫零违规、最大文件 223 行。
+      N1（审计正则补写 /etc 模式）已由 PM 落地销项。
+      N2 备注：建议用户本人抽空自行复验一次 TTY 交互体验（非阻塞）。
 
 known_limitations:
   - B1: 消息数≤10 且单条工具输出巨大时 compact 无法压缩，理论可致上下文溢出；

@@ -146,6 +146,7 @@ const DESTRUCTIVE_PATTERNS: Array<{ label: string; re: RegExp }> = [
   { label: "kill", re: /\bkill\s/ },
   { label: "mkfs", re: /\bmkfs\b/ },
   { label: "写 /dev", re: />\s*\/dev\// },
+  { label: "写 /etc", re: />\s*\/etc\// },
 ];
 
 /**
