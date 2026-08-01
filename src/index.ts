@@ -10,7 +10,8 @@ import { buildSystemPrompt, collectEnv } from "./agent/prompts.js";
 import { runTurn } from "./agent/loop.js";
 import { History } from "./session/history.js";
 import { createRenderer, renderTodos, type Renderer } from "./ui/render.js";
-import { createAskUserQuestionTool, type PromptFn } from "./tools/askUserQuestion.js";
+import { createReplController } from "./ui/replController.js";
+import { createAskUserQuestionTool } from "./tools/askUserQuestion.js";
 import { createTodoWriteTool, type TodoStore } from "./tools/todoWrite.js";
 
 function readVersion(): string {
@@ -71,34 +72,6 @@ async function runRepl(): Promise<void> {
     prompt: "xharness> ",
   });
 
-  let busy = false;
-  let activeController: AbortController | null = null;
-  let pendingAnswer: ((answer: string) => void) | null = null;
-
-  const promptFn: PromptFn = (rendered) =>
-    new Promise((resolve) => {
-      process.stdout.write(rendered);
-      pendingAnswer = resolve;
-    });
-  session.registry.register(createAskUserQuestionTool(promptFn));
-
-  rl.on("SIGINT", () => {
-    if (busy) {
-      pendingAnswer = null;
-      process.stdout.write("\n[正在中断当前回合…]\n");
-      activeController?.abort();
-    } else {
-      process.stdout.write("\n");
-      rl.write(null, { ctrl: true, name: "u" });
-      rl.prompt();
-    }
-  });
-
-  rl.on("close", () => {
-    process.stdout.write("\n再见。\n");
-    process.exit(0);
-  });
-
   const handleSlashCommand = (input: string): void => {
     if (input === "/clear") {
       history = new History();
@@ -113,56 +86,49 @@ async function runRepl(): Promise<void> {
     }
   };
 
-  const handleInput = async (input: string): Promise<void> => {
-    busy = true;
-    activeController = new AbortController();
-    try {
-      await runTurn({
+  const controller = createReplController({
+    runTurn: (input, signal) =>
+      runTurn({
         userInput: input,
         history,
         registry: session.registry,
         client: session.client,
         config: session.config,
         system: session.system,
-        signal: activeController.signal,
+        signal,
         onEvent: session.renderer.onEvent,
-      });
-    } catch (err) {
-      process.stderr.write(
-        `错误: ${err instanceof Error ? err.message : String(err)}\n`
-      );
-    } finally {
-      busy = false;
-      activeController = null;
-      pendingAnswer = null;
-      rl.prompt();
-    }
-  };
-
-  rl.on("line", (line) => {
-    if (pendingAnswer) {
-      const resolve = pendingAnswer;
-      pendingAnswer = null;
-      resolve(line);
-      return;
-    }
-    if (busy) return;
-    const input = line.trim();
-    if (input.length === 0) {
-      rl.prompt();
-      return;
-    }
-    if (input === "/exit") {
-      rl.close();
-      return;
-    }
-    if (input.startsWith("/")) {
+      }),
+    runCommand: (input) => {
+      if (input === "/exit") return "exit";
       handleSlashCommand(input);
-      rl.prompt();
-      return;
-    }
-    void handleInput(input);
+      return "handled";
+    },
+    write: (text) => process.stdout.write(text),
+    prompt: () => rl.prompt(),
+    onExit: () => {
+      process.stdout.write("\n再见。\n");
+      process.exit(0);
+    },
   });
+
+  session.registry.register(
+    controller.wrapAskUserQuestion(
+      createAskUserQuestionTool((rendered) => controller.promptFn(rendered))
+    )
+  );
+
+  rl.on("SIGINT", () => {
+    if (controller.handleSigint()) {
+      process.stdout.write("\n[正在中断当前回合…]\n");
+    } else {
+      process.stdout.write("\n");
+      rl.write(null, { ctrl: true, name: "u" });
+      rl.prompt();
+    }
+  });
+
+  rl.on("line", (line) => controller.handleLine(line));
+  rl.on("close", () => controller.handleClose());
 
   process.stdout.write(
     `xharness v${readVersion()} — 输入内容开始对话，/exit 或 Ctrl+D 退出。\n`
