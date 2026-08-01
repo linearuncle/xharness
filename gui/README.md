@@ -17,7 +17,12 @@ ANTHROPIC_API_KEY=你的key npm start
 
 ## 功能
 
-- **项目/会话**：左侧栏管理多项目多会话（右键会话可置顶/删除），持久化于 `~/.xharness/gui/state.json`
+- **项目/会话**：左侧栏管理多项目多会话（右键会话可置顶/删除）
+- **JSONL 持久化**（append-only 事件日志，防崩溃）：
+  - `~/.xharness/gui/sessions/<会话id>.jsonl` —— 首行 meta，此后每行一个消息/工具/notice 块，
+    标题与置顶变更以 `meta_update` 行追加，`/clear` 以 `clear` 行追加，启动时重放重建
+  - `~/.xharness/gui/projects.jsonl` —— 项目增删操作日志
+  - 旧 `state.json` 首次启动自动迁移（原文件备份为 `.bak`）
 - **空态建议卡**：探索 / 构建 / 审查 / 修复 四张卡一键填入
 - **流式会话**：文本流式渲染、`已处理 Ns` 计时、工具调用行（已运行/已读取/已编辑…）、
   思考内容折叠展示（点击"已思考"展开）、最终 markdown 渲染
