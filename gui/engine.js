@@ -284,6 +284,14 @@ export async function send(convId, projectDir, text, savedBlocks, emit, attachme
     return;
   }
 
+  // 工具的相对路径与 Bash cwd 必须跟随会话的项目目录，
+  // 否则继承 Electron 进程启动目录会把模型带偏（曾导致相对路径读文件失败）
+  try {
+    process.chdir(projectDir);
+  } catch {
+    emit({ type: "notice", text: `[警告] 项目目录不可用: ${projectDir}` });
+  }
+
   // 斜杠命令（GUI 支持 /compact /clear 与技能名；其余内置在 GUI 中无意义）
   let turnInput = text;
   if (text.startsWith("/")) {

@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld("api", {
   pickAttachments: () => ipcRenderer.invoke("attach:pick"),
   savePastedImage: (base64, ext) =>
     ipcRenderer.invoke("attach:save-clipboard", { base64, ext }),
+  yoloAck: () => ipcRenderer.invoke("yolo:ack"),
   stop: (id) => ipcRenderer.invoke("chat:stop", id),
   answer: (id, text) => ipcRenderer.invoke("chat:answer", { id, text }),
   appendBlock: (id, block) => ipcRenderer.invoke("block:append", { id, block }),

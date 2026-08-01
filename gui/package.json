@@ -9,9 +9,11 @@
     "postinstall": "node scripts/patch-electron-name.mjs"
   },
   "dependencies": {
+    "dompurify": "^3.4.12",
     "marked": "^12.0.0"
   },
   "devDependencies": {
     "electron": "^37.0.0"
-  }
+  },
+  "license": "MIT"
 }

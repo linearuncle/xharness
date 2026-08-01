@@ -155,6 +155,11 @@ export function getProviders() {
   return providers;
 }
 
+// 给渲染进程的脱敏视图：不下发 apiKey 明文
+export function getProvidersSafe() {
+  return providers.map((p) => ({ ...p, apiKey: "", hasKey: !!p.apiKey }));
+}
+
 export function upsertProvider(p) {
   const i = providers.findIndex((x) => x.id === p.id);
   if (i >= 0) providers[i] = p;

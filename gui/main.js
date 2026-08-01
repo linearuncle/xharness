@@ -1,13 +1,17 @@
-import { app, BrowserWindow, ipcMain, dialog, nativeImage } from "electron";
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { app, BrowserWindow, ipcMain, dialog, nativeImage, protocol } from "electron";
+import {
+  readFileSync, writeFileSync, mkdirSync, copyFileSync, existsSync,
+} from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { dirname, join, basename, resolve } from "node:path";
 import { userInfo, homedir } from "node:os";
 import { marked } from "marked";
 import * as store from "./store.js";
 import * as engine from "./engine.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
+const ATT_DIR = join(homedir(), ".xharness", "gui", "attachments");
+const ACK_FILE = join(homedir(), ".xharness", "gui", "yolo-ack");
 let win = null;
 
 app.setName("xharness");
@@ -15,7 +19,20 @@ app.setName("xharness");
 marked.setOptions({ breaks: true });
 
 function escapeHtml(s) {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return s
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+// 仅允许操作已添加的项目目录（IPC 信任边界）
+function isKnownProject(dir) {
+  return typeof dir === "string" && store.getProviders && store.sidebarData()
+    .projects.some((p) => p.dir === dir);
+}
+
+// 附件只允许来自受控目录（渲染进程不可指定任意路径）
+function inAttachmentsDir(p) {
+  return typeof p === "string" && resolve(p).startsWith(ATT_DIR + "/");
 }
 
 const appIcon = nativeImage.createFromPath(join(here, "assets", "icon.png"));
@@ -36,6 +53,9 @@ function createWindow() {
     webPreferences: {
       preload: join(here, "preload.cjs"),
       contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
     },
   });
   win.loadFile(join(here, "renderer", "index.html"));
@@ -50,6 +70,19 @@ app.whenReady().then(() => {
     app.quit();
     return;
   }
+  // xatt:// 自定义协议：只从附件目录按文件名取图，杜绝任意 file:// 路径
+  protocol.handle("xatt", (req) => {
+    try {
+      const name = basename(decodeURIComponent(new URL(req.url).pathname));
+      const p = join(ATT_DIR, name);
+      if (!inAttachmentsDir(p) || !existsSync(p)) return new Response("", { status: 404 });
+      const ext = name.split(".").pop().toLowerCase();
+      const mime = IMAGE_MEDIA[ext] ?? "application/octet-stream";
+      return new Response(readFileSync(p), { headers: { "content-type": mime } });
+    } catch {
+      return new Response("", { status: 400 });
+    }
+  });
   createWindow();
 });
 
@@ -60,13 +93,20 @@ app.on("window-all-closed", () => app.quit());
 ipcMain.handle("state:get", () => ({
   username: userInfo().username,
   sidebar: store.sidebarData(),
-  providers: store.getProviders(),
+  providers: store.getProvidersSafe(),
   efforts: engine.EFFORTS,
   envKeyPresent: !!(process.env.ANTHROPIC_API_KEY || process.env.DEEPSEEK_API_KEY),
+  yoloAcked: existsSync(ACK_FILE),
 }));
 
+ipcMain.handle("yolo:ack", () => {
+  mkdirSync(dirname(ACK_FILE), { recursive: true });
+  writeFileSync(ACK_FILE, String(Date.now()));
+  return true;
+});
+
 ipcMain.handle("settings:get", () => ({
-  providers: store.getProviders(),
+  providers: store.getProvidersSafe(),
   envKeyPresent: !!(process.env.ANTHROPIC_API_KEY || process.env.DEEPSEEK_API_KEY),
 }));
 
@@ -74,13 +114,19 @@ ipcMain.handle("settings:upsert", (_e, provider) => {
   if (!provider?.id || !provider?.name || !provider?.baseUrl) {
     return { ok: false, error: "名称与 Base URL 必填" };
   }
+  // 渲染进程拿到的是脱敏对象：apiKey 留空表示"保持原 key 不变"
+  const existing = store.getProviders().find((p) => p.id === provider.id);
+  if (provider.keyMode === "manual" && !provider.apiKey && existing?.apiKey) {
+    provider.apiKey = existing.apiKey;
+  }
+  delete provider.hasKey;
   store.upsertProvider(provider);
-  return { ok: true, providers: store.getProviders() };
+  return { ok: true, providers: store.getProvidersSafe() };
 });
 
 ipcMain.handle("settings:delete", (_e, id) => {
   store.deleteProvider(id);
-  return { providers: store.getProviders() };
+  return { providers: store.getProvidersSafe() };
 });
 
 ipcMain.handle("project:add", async () => {
@@ -92,6 +138,7 @@ ipcMain.handle("project:add", async () => {
 });
 
 ipcMain.handle("conv:new", (_e, projectDir) => {
+  if (!isKnownProject(projectDir)) return null;
   const id = store.newConversation(projectDir);
   return { id, sidebar: store.sidebarData() };
 });
@@ -119,26 +166,39 @@ ipcMain.handle("conv:delete", (_e, id) => {
   return store.sidebarData();
 });
 
-ipcMain.handle("conv:setModelChoice", (_e, { id, projectDir, providerId, model }) => {
-  engine.getSession(id, projectDir, store.getConversation(id)?.blocks);
-  engine.setModelChoice(id, providerId, model);
+ipcMain.handle("conv:setModelChoice", (_e, { id, providerId, model }) => {
+  const c = store.getConversation(id);
+  if (c) {
+    engine.getSession(id, c.projectDir, c.blocks);
+    engine.setModelChoice(id, providerId, model);
+  }
   return engine.sessionMeta(id);
 });
 
-ipcMain.handle("conv:setEffort", (_e, { id, projectDir, effort }) => {
-  engine.getSession(id, projectDir, store.getConversation(id)?.blocks);
-  engine.setEffort(id, effort);
+ipcMain.handle("conv:setEffort", (_e, { id, effort }) => {
+  const c = store.getConversation(id);
+  if (c) {
+    engine.getSession(id, c.projectDir, c.blocks);
+    engine.setEffort(id, effort);
+  }
   return engine.sessionMeta(id);
 });
 
-ipcMain.handle("skills:list", (_e, projectDir) => engine.listSkills(projectDir));
-
-ipcMain.handle("files:search", (_e, { projectDir, q }) =>
-  engine.searchFiles(projectDir, q)
+ipcMain.handle("skills:list", (_e, projectDir) =>
+  isKnownProject(projectDir) ? engine.listSkills(projectDir) : []
 );
 
-ipcMain.handle("ctx:get", (_e, projectDir) => engine.projectContext(projectDir));
+ipcMain.handle("files:search", (_e, { projectDir, q }) =>
+  isKnownProject(projectDir) ? engine.searchFiles(projectDir, q) : []
+);
 
+ipcMain.handle("ctx:get", (_e, projectDir) =>
+  isKnownProject(projectDir)
+    ? engine.projectContext(projectDir)
+    : { folder: "—", branch: null, changes: [] }
+);
+
+// markdown 渲染 + 消毒在渲染层（DOMPurify）完成；这里只做解析
 ipcMain.handle("md:render", (_e, text) => marked.parse(text ?? ""));
 
 ipcMain.handle("chat:answer", (_e, { id, text }) => engine.answer(id, text));
@@ -147,17 +207,17 @@ ipcMain.handle("chat:stop", (_e, id) => engine.stop(id));
 
 ipcMain.handle("block:append", (_e, { id, block }) => store.appendBlock(id, block));
 
-// 剪贴板粘贴的图片：落盘到 ~/.xharness/gui/attachments/ 后按普通附件路径处理
+// 剪贴板粘贴的图片：落盘到受控附件目录
 ipcMain.handle("attach:save-clipboard", (_e, { base64, ext }) => {
   const safeExt = ["png", "jpg", "jpeg", "webp", "gif"].includes(ext) ? ext : "png";
-  const dir = join(homedir(), ".xharness", "gui", "attachments");
-  mkdirSync(dir, { recursive: true });
+  mkdirSync(ATT_DIR, { recursive: true });
   const name = `paste-${Date.now()}.${safeExt}`;
-  const path = join(dir, name);
+  const path = join(ATT_DIR, name);
   writeFileSync(path, Buffer.from(base64, "base64"));
   return { path, name };
 });
 
+// 文件选择器选中的附件：统一拷贝进受控附件目录后再使用
 ipcMain.handle("attach:pick", async () => {
   const r = await dialog.showOpenDialog(win, {
     properties: ["openFile", "multiSelections"],
@@ -167,7 +227,17 @@ ipcMain.handle("attach:pick", async () => {
     ],
   });
   if (r.canceled) return [];
-  return r.filePaths.map((p) => ({ path: p, name: p.split("/").pop() }));
+  mkdirSync(ATT_DIR, { recursive: true });
+  const out = [];
+  for (const p of r.filePaths) {
+    const name = `${Date.now()}-${basename(p)}`;
+    const dest = join(ATT_DIR, name);
+    try {
+      copyFileSync(p, dest);
+      out.push({ path: dest, name: basename(p), fileName: name });
+    } catch { /* 单个失败跳过 */ }
+  }
+  return out;
 });
 
 const IMAGE_MEDIA = {
@@ -178,15 +248,16 @@ const IMAGE_MEDIA = {
 function loadAttachments(paths) {
   const out = [];
   for (const p of paths ?? []) {
+    if (!inAttachmentsDir(p)) continue; // 只接受受控目录内的附件
     try {
       const ext = p.split(".").pop().toLowerCase();
       const media = IMAGE_MEDIA[ext];
       const data = readFileSync(p);
       if (media) {
-        out.push({ kind: "image", path: p, name: p.split("/").pop(), mediaType: media, base64: data.toString("base64") });
+        out.push({ kind: "image", path: p, name: basename(p), mediaType: media, base64: data.toString("base64") });
       } else {
         // 非图片附件：以文本形式注入（截断保护）
-        out.push({ kind: "text", path: p, name: p.split("/").pop(), text: data.toString("utf8").slice(0, 30000) });
+        out.push({ kind: "text", path: p, name: basename(p), text: data.toString("utf8").slice(0, 30000) });
       }
     } catch (err) {
       out.push({ kind: "error", name: p, text: err.message });
@@ -203,7 +274,10 @@ ipcMain.handle("chat:send", async (_e, { id, text, attachmentPaths }) => {
   }
   const attachments = loadAttachments(attachmentPaths);
   for (const a of attachments) {
-    store.appendBlock(id, { kind: "attachment", name: a.name, type: a.kind, path: a.path });
+    store.appendBlock(id, {
+      kind: "attachment", name: a.name, type: a.kind,
+      fileName: a.path ? basename(a.path) : undefined,
+    });
   }
   store.appendBlock(id, { kind: "user", text });
   const emit = (event) => {
@@ -212,5 +286,3 @@ ipcMain.handle("chat:send", async (_e, { id, text, attachmentPaths }) => {
   };
   await engine.send(id, c.projectDir, text, c.blocks, emit, attachments);
 });
-
-ipcMain.handle("user:escape", (_e, text) => escapeHtml(text ?? ""));

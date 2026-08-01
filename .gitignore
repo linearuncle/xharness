@@ -1,4 +1,12 @@
-node_modules
-dist
-.env.test
+node_modules/
+dist/
 .env
+.env.*
+!.env.test.example
+!.env.example
+*.log
+.DS_Store
+coverage/
+.vscode/
+.idea/
+*.pem

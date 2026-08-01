@@ -161,15 +161,18 @@ function renderStoredBlock(list, b) {
     list.appendChild(el(`<div class="turn-meta">已处理${b.elapsed ? " " + b.elapsed + "s" : ""}</div>`));
   } else if (b.kind === "assistant") {
     const d = el(`<div class="assistant"></div>`);
-    api.renderMarkdown(b.text).then((h) => (d.innerHTML = h));
+    api.renderMarkdown(b.text).then((h) => (d.innerHTML = DOMPurify.sanitize(h)));
     list.appendChild(d);
   } else if (b.kind === "tool") {
     list.appendChild(toolLineEl(b.summary, b.isError));
   } else if (b.kind === "notice") {
     list.appendChild(el(`<div class="notice">${esc(b.text)}</div>`));
   } else if (b.kind === "attachment") {
-    if (b.type === "image" && b.path) {
-      list.appendChild(el(`<div class="msg-user"><img class="chat-img" src="file://${esc(b.path)}" alt="${esc(b.name)}" /></div>`));
+    const fn = b.fileName ?? (b.path ? b.path.split("/").pop() : null);
+    if (b.type === "image" && fn) {
+      const w = el(`<div class="msg-user"><img class="chat-img" src="xatt://a/${encodeURIComponent(fn)}" alt="${esc(b.name)}" /></div>`);
+      w.querySelector("img").onerror = () => (w.innerHTML = `<div class="bubble">📎 ${esc(b.name)}</div>`);
+      list.appendChild(w);
     } else {
       list.appendChild(el(`<div class="msg-user"><div class="bubble">📎 ${esc(b.name)}</div></div>`));
     }
@@ -213,7 +216,7 @@ async function sendCurrent() {
   const list = $("chat-list");
   for (const a of S.attachments) {
     if (a.isImage) {
-      list.appendChild(el(`<div class="msg-user"><img class="chat-img" src="file://${esc(a.path)}" alt="${esc(a.name)}" /></div>`));
+      list.appendChild(el(`<div class="msg-user"><img class="chat-img" src="xatt://a/${encodeURIComponent(a.fileName ?? a.name)}" alt="${esc(a.name)}" /></div>`));
     } else {
       list.appendChild(el(`<div class="msg-user"><div class="bubble">📎 ${esc(a.name)}</div></div>`));
     }
@@ -396,7 +399,7 @@ function finishTurn(reason, skipPersist = false) {
 
   // 最终 markdown 渲染
   for (const seg of t.textSegs) {
-    api.renderMarkdown(seg.text).then((h) => (seg.el.innerHTML = h));
+    api.renderMarkdown(seg.text).then((h) => (seg.el.innerHTML = DOMPurify.sanitize(h)));
   }
   // 操作行（只保留可用的复制）
   const last = t.textSegs[t.textSegs.length - 1];
@@ -625,7 +628,7 @@ function el(html) {
   return t.content.firstChild;
 }
 function esc(s) {
-  return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 function autosize() {
   const i = $("input");
@@ -653,6 +656,7 @@ async function boot() {
   renderSidebar();
   bindSettings();
   bindPlusMenu();
+  maybeShowYoloModal(st.yoloAcked);
 
   // 全局快捷键：Cmd+N 新对话 / Cmd+O 添加项目
   window.addEventListener("keydown", (e) => {
@@ -704,7 +708,7 @@ async function boot() {
         fr.readAsDataURL(file);
       });
       const saved = await api.savePastedImage(base64, ext);
-      S.attachments.push({ ...saved, isImage: true });
+      S.attachments.push({ ...saved, fileName: saved.name, isImage: true });
     }
     renderAttachChips();
   });
@@ -872,7 +876,7 @@ function renderProviderDetail() {
     } else {
       keyArea.innerHTML = "";
       const row = el(`<div class="key-row">
-          <input type="password" placeholder="输入 API Key" value="${esc(work.apiKey ?? "")}" />
+          <input type="password" placeholder="${work.hasKey ? "已保存（留空保持不变）" : "输入 API Key"}" value="" />
           <span class="icon-btn" title="显示/隐藏">👁</span>
         </div>`);
       const inp = row.querySelector("input");
@@ -1018,7 +1022,7 @@ function renderAttachChips() {
   for (const a of S.attachments) {
     let chip;
     if (a.isImage) {
-      chip = el(`<span class="attach-thumb"><img src="file://${esc(a.path)}" alt="${esc(a.name)}" /><span class="x" title="移除">✕</span></span>`);
+      chip = el(`<span class="attach-thumb"><img src="xatt://a/${encodeURIComponent(a.fileName ?? a.name)}" alt="${esc(a.name)}" /><span class="x" title="移除">✕</span></span>`);
     } else {
       chip = el(`<span class="attach-chip">📄<span>${esc(a.name)}</span><span class="x" title="移除">✕</span></span>`);
     }
@@ -1028,4 +1032,18 @@ function renderAttachChips() {
     };
     box.appendChild(chip);
   }
+}
+
+/* ---------------- 首启 YOLO 风险确认 ---------------- */
+function maybeShowYoloModal(acked) {
+  if (acked) return;
+  const modal = $("yolo-modal");
+  modal.classList.remove("hidden");
+  const agree = $("ym-agree");
+  const start = $("ym-start");
+  agree.onchange = () => (start.disabled = !agree.checked);
+  start.onclick = async () => {
+    await api.yoloAck();
+    modal.classList.add("hidden");
+  };
 }

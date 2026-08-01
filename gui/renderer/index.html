@@ -2,6 +2,8 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' xatt:; connect-src 'none'" />
   <title>xharness</title>
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -157,6 +159,19 @@
     </div>
   </div>
 
+  <!-- 首次启动 YOLO 风险确认 -->
+  <div id="yolo-modal" class="hidden">
+    <div class="ym-card">
+      <div class="ym-title">⚠ 完全访问模式</div>
+      <p>xharness 以 YOLO 模式运行：模型的文件读写与 shell 命令会在你的机器上
+        <b>直接执行，无确认、无沙箱、无命令黑名单</b>。请只在可信任务与非关键目录使用，
+        重要数据先做好版本控制或备份。</p>
+      <label class="ym-check"><input type="checkbox" id="ym-agree" /> 我已了解并接受上述风险</label>
+      <button class="btn primary" id="ym-start" disabled>开始使用</button>
+    </div>
+  </div>
+
+  <script src="vendor/purify.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
