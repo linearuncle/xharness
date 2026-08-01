@@ -165,6 +165,22 @@ describe("REPL controller 优雅关闭", () => {
     expect(h.exits).toBe(1);
   });
 
+  it("closing 时参数校验类错误保留原始内容、不被改写为输入流已关闭", async () => {
+    const h = setup();
+    const tool = h.controller.wrapAskUserQuestion(
+      createAskUserQuestionTool((rendered) => h.controller.promptFn(rendered))
+    );
+    h.controller.handleLine("回合");
+    h.controller.handleClose();
+    const result = await tool.execute({
+      question: "Q?",
+      options: [{ label: "只有一个选项", description: "非法" }],
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content).not.toBe(STDIN_CLOSED_RESULT);
+    expect(result.content).toContain("2 to 4");
+  });
+
   it("close 之后再发起的 AskUserQuestion 直接返回输入流已关闭", async () => {
     const h = setup();
     const tool = h.controller.wrapAskUserQuestion(

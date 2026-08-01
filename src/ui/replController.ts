@@ -5,7 +5,9 @@ export const STDIN_CLOSED_RESULT = "[无法获取用户输入——输入流已�
 export interface ReplControllerOptions {
   runTurn: (input: string, signal: AbortSignal) => Promise<void>;
   /** 处理 / 开头的命令；返回 "exit" 表示应退出 REPL */
-  runCommand: (input: string) => "exit" | "handled";
+  runCommand: (
+    input: string
+  ) => "exit" | "handled" | Promise<"exit" | "handled">;
   write: (text: string) => void;
   prompt: () => void;
   onExit: () => void;
@@ -34,6 +36,9 @@ export function createReplController(opts: ReplControllerOptions): ReplControlle
   let exited = false;
   let activeController: AbortController | null = null;
   let pendingAnswer: PendingAnswer | null = null;
+  // AskUserQuestion 本次执行是否已进入"等待用户输入"阶段：
+  // 参数校验失败发生在等待之前，据此区分校验类错误与输入流关闭
+  let promptRequested = false;
 
   const exit = (): void => {
     if (!exited) {
@@ -58,7 +63,7 @@ export function createReplController(opts: ReplControllerOptions): ReplControlle
         const input = queue.shift()!.trim();
         if (input.length === 0) continue;
         if (input.startsWith("/")) {
-          if (opts.runCommand(input) === "exit") {
+          if ((await opts.runCommand(input)) === "exit") {
             exit();
             return;
           }
@@ -117,6 +122,7 @@ export function createReplController(opts: ReplControllerOptions): ReplControlle
     },
 
     promptFn(rendered: string): Promise<string> {
+      promptRequested = true;
       if (closing || exited) {
         return Promise.reject(new Error(STDIN_CLOSED_RESULT));
       }
@@ -135,11 +141,10 @@ export function createReplController(opts: ReplControllerOptions): ReplControlle
           input: unknown,
           context?: ToolExecuteContext
         ): Promise<ToolResult> {
-          if (closing || exited) {
-            return { content: STDIN_CLOSED_RESULT, isError: true };
-          }
+          promptRequested = false;
           const result = await tool.execute(input, context);
-          if ((closing || exited) && result.isError) {
+          // 仅改写"等待输入类"错误；参数校验失败发生在等待输入之前，保留原始内容
+          if ((closing || exited) && result.isError && promptRequested) {
             return { content: STDIN_CLOSED_RESULT, isError: true };
           }
           return result;

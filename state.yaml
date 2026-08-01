@@ -89,8 +89,11 @@ tranches:
         title: 中断路径为未执行 tool_use 回填占位 tool_result（Judge 裁决），附配对完整性单测
         allowed_files: [src/agent/loop.ts, test/unit/loop.test.ts]
         verify: [npm run build, npx tsc --noEmit, npm test]
-        status: active
-        receipt: null
+        status: done
+        receipt: |
+          result: done. commit a9b7837。52/52 绿。占位回填与触顶设计同构，
+          新增 expectAllToolUsesPaired 断言覆盖半程中断与零执行中断两场景。
+          PM 复验 build/tsc/test 全绿，按 Judge 预授权解锁 T3。
     judge: |
       conditional approve。现场复验：51/51 绿、铁律零违规、F1/F2/F3 规格合规、
       冒烟由 Judge 亲自复跑通过（真实 DeepSeek 端点 Write+Read）。
@@ -100,10 +103,56 @@ tranches:
       "字面遵循 GOAL 但产出非法 history" 的取舍必须升级 Judge，不得备忘自行落地。
   T3:
     title: 交互 F17/F18/F11/F11b
-    status: pending
+    status: active
+    tasks:
+      - id: T3.1
+        kind: worker
+        title: ui/render（领域事件渲染）+ REPL + AskUserQuestion + TodoWrite + Ctrl+C 中断联动（含 Bash SIGTERM）
+        allowed_files: [src/ui/**, src/index.ts, src/tools/askUserQuestion.ts, src/tools/todoWrite.ts, src/tools/bash.ts, src/tools/registry.ts, src/types/tools.ts, src/agent/loop.ts, test/unit/**]
+        verify: [npm run build, npx tsc --noEmit, npm test]
+        status: done
+        receipt: |
+          result: done. commit 454d7c4。77/77 绿（新增 25）。render 零 SDK 依赖 80 字符截断；
+          AskUserQuestion 工厂注入 promptFn 不持 readline，abort 时 is_error 回填保配对；
+          TodoWrite store 注入；bash 接 AbortSignal SIGTERM 进程组（Judge 备忘落地）；
+          REPL pendingAnswer 分流。-p 模式改用共享 renderer。
+      - id: T3.2
+        kind: worker(续用 T3.1 Worker)
+        title: 修复 PM 冒烟发现的 REPL 两缺陷：busy 期输入静默丢弃、stdin EOF 杀死进行中回合
+        allowed_files: [src/index.ts, src/ui/**, test/unit/**]
+        verify: [npm run build, npx tsc --noEmit, npm test]
+        status: done
+        receipt: |
+          result: done. commit 63b4c70。86/86 绿（+9）。新增 ui/replController.ts：
+          FIFO 输入排队统一 pump、/exit 排队生效、close 优雅排空后退出、
+          EOF 下 AskUserQuestion 以 is_error 回填保配对。
+      - id: T3.3
+        kind: pm
+        title: T3 出口冒烟（真实 DeepSeek 端点，管道驱动多步任务）
+        status: done
+        receipt: |
+          沙箱管道驱动："创建 add.mjs + test.mjs 并跑 node 验证" → 模型 Write×2 + Bash，
+          流式渲染 ⏺/✔ 正常，/exit 排队后生效，exit 0；PM 独立跑 test.mjs 通过。
+          修复前的丢回合复现路径已消除。
+    judge: |
+      approve。现场复验 86/86 绿、铁律零泄漏、F11 配对硬约束在 SIGINT/EOF 两路径
+      核查无漏洞、bash SIGTERM 备忘销项、-p 通道渲染归位。
+      裁定：管道冒烟走与真人相同代码路径，足以过 T3 出口；条件项挂 §8 最终验收——
+      真人 TTY 实测（多步任务 + busy Ctrl+C + AskUserQuestion 现场作答）不得省略。
+      既定语义追加：AskUserQuestion 在 SIGINT/EOF 下一律 is_error 回填。
+      非阻塞备忘：closing 时参数校验错误被改写为 STDIN_CLOSED 消息（失真），T4/T5 顺手改。
   T4:
     title: 上下文 F4 compact + F12 AGENTS.md
-    status: pending
+    status: active
+    tasks:
+      - id: T4.1
+        kind: worker
+        title: F4 compact（自动+手动共用入口、摘要保留决策、N=10、失败保留原历史、配对安全切点）+ F12 AGENTS.md/CLAUDE.md 注入
+        allowed_files: [src/agent/compact.ts, src/agent/prompts.ts, src/session/history.ts, src/index.ts, src/ui/**, test/unit/**]
+        verify: [npm run build, npx tsc --noEmit, npm test]
+        status: active
+        receipt: null
+    judge: pending
   T5:
     title: 技能 F13-F16 + Skill 元工具
     status: pending

@@ -1,8 +1,12 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { buildSystemPrompt, collectEnv } from "../../src/agent/prompts.js";
+import {
+  buildSystemPrompt,
+  collectEnv,
+  loadProjectInstructions,
+} from "../../src/agent/prompts.js";
 
 const tempDirs: string[] = [];
 
@@ -49,6 +53,35 @@ describe("buildSystemPrompt", () => {
     expect(prompt).not.toContain("# 可用技能");
     expect(prompt).not.toContain("git 状态");
     expect(prompt).toContain("# 环境信息");
+  });
+});
+
+describe("loadProjectInstructions", () => {
+  function makeDir(): string {
+    const dir = mkdtempSync(join(tmpdir(), "xharness-instr-"));
+    tempDirs.push(dir);
+    return dir;
+  }
+
+  it("AGENTS.md 优先于 CLAUDE.md", () => {
+    const dir = makeDir();
+    writeFileSync(join(dir, "AGENTS.md"), "agents 指令");
+    writeFileSync(join(dir, "CLAUDE.md"), "claude 指令");
+    expect(loadProjectInstructions(dir)).toBe("agents 指令");
+  });
+
+  it("无 AGENTS.md 时回退读 CLAUDE.md", () => {
+    const dir = makeDir();
+    writeFileSync(join(dir, "CLAUDE.md"), "claude 指令");
+    expect(loadProjectInstructions(dir)).toBe("claude 指令");
+  });
+
+  it("两者都不存在时返回空串", () => {
+    expect(loadProjectInstructions(makeDir())).toBe("");
+  });
+
+  it("目录本身不存在（读取失败）时静默返回空串", () => {
+    expect(loadProjectInstructions(join(makeDir(), "不存在的子目录"))).toBe("");
   });
 });
 

@@ -1,4 +1,6 @@
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 export interface SkillSummary {
   name: string;
@@ -45,6 +47,21 @@ export function collectEnv(cwd: string): EnvInfo {
     date: new Date().toISOString().slice(0, 10),
     gitStatus,
   };
+}
+
+const PROJECT_INSTRUCTION_FILES = ["AGENTS.md", "CLAUDE.md"];
+
+export function loadProjectInstructions(cwd: string): string {
+  for (const name of PROJECT_INSTRUCTION_FILES) {
+    try {
+      return readFileSync(join(cwd, name), "utf8");
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === "ENOENT") continue;
+      return "";
+    }
+  }
+  return "";
 }
 
 export function buildSystemPrompt(opts: BuildSystemPromptOptions): string {

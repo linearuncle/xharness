@@ -21,6 +21,11 @@ export class History {
     return estimateTokens(this.messages);
   }
 
+  replaceAll(messages: Message[]): void {
+    this.messages.length = 0;
+    this.messages.push(...messages);
+  }
+
   appendInterruptMarker(): void {
     this.messages.push({
       role: "user",

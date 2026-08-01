@@ -6,8 +6,13 @@ import { createInterface } from "node:readline";
 import { loadConfig, type Config } from "./config.js";
 import { createDefaultRegistry, type ToolRegistry } from "./tools/registry.js";
 import { createApiClient, type ApiClient } from "./api/client.js";
-import { buildSystemPrompt, collectEnv } from "./agent/prompts.js";
+import {
+  buildSystemPrompt,
+  collectEnv,
+  loadProjectInstructions,
+} from "./agent/prompts.js";
 import { runTurn } from "./agent/loop.js";
+import { forceCompact, maybeCompact } from "./agent/compact.js";
 import { History } from "./session/history.js";
 import { createRenderer, renderTodos, type Renderer } from "./ui/render.js";
 import { createReplController } from "./ui/replController.js";
@@ -37,7 +42,7 @@ function createSession(onTodosUpdate: (store: TodoStore) => void): Session {
   const env = collectEnv(process.cwd());
   const system = buildSystemPrompt({
     ...env,
-    projectInstructions: "",
+    projectInstructions: loadProjectInstructions(process.cwd()),
     skillSummaries: [],
   });
   const renderer = createRenderer();
@@ -72,23 +77,54 @@ async function runRepl(): Promise<void> {
     prompt: "xharness> ",
   });
 
-  const handleSlashCommand = (input: string): void => {
+  const compactDeps = () => ({
+    history,
+    client: session.client,
+    config: session.config,
+    system: session.system,
+  });
+
+  const handleSlashCommand = async (input: string): Promise<void> => {
     if (input === "/clear") {
       history = new History();
       session.todoStore.todos = [];
       process.stdout.write("已清空会话历史与任务清单。\n");
     } else if (input === "/help" || input.startsWith("/help ")) {
-      process.stdout.write("/help 将在后续版本支持。\n");
+      process.stdout.write(
+        [
+          "内置命令：",
+          "  /help     显示本帮助",
+          "  /clear    清空会话历史与任务清单",
+          "  /compact  手动压缩会话历史",
+          "  /exit     退出",
+          "技能列表将在 T5 支持。",
+        ].join("\n") + "\n"
+      );
     } else if (input === "/compact" || input.startsWith("/compact ")) {
-      process.stdout.write("/compact 将在后续版本支持。\n");
+      const result = await forceCompact(compactDeps());
+      if (result.compacted) {
+        process.stdout.write(
+          `已压缩会话历史：估算 token ${result.beforeTokens} → ${result.afterTokens}。\n`
+        );
+      } else {
+        process.stdout.write(`${result.warning ?? "未执行压缩。"}\n`);
+      }
     } else {
       process.stdout.write(`未知命令: ${input}\n`);
     }
   };
 
   const controller = createReplController({
-    runTurn: (input, signal) =>
-      runTurn({
+    runTurn: async (input, signal) => {
+      const compact = await maybeCompact(compactDeps());
+      if (compact.compacted) {
+        process.stdout.write(
+          `[历史接近上下文窗口上限，已自动压缩：估算 token ${compact.beforeTokens} → ${compact.afterTokens}]\n`
+        );
+      } else if (compact.warning) {
+        process.stdout.write(`[警告] ${compact.warning}\n`);
+      }
+      await runTurn({
         userInput: input,
         history,
         registry: session.registry,
@@ -97,10 +133,11 @@ async function runRepl(): Promise<void> {
         system: session.system,
         signal,
         onEvent: session.renderer.onEvent,
-      }),
-    runCommand: (input) => {
+      });
+    },
+    runCommand: async (input) => {
       if (input === "/exit") return "exit";
-      handleSlashCommand(input);
+      await handleSlashCommand(input);
       return "handled";
     },
     write: (text) => process.stdout.write(text),
