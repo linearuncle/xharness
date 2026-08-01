@@ -219,6 +219,84 @@ describe("配对安全切点", () => {
     expect(keepFirst.content.some((b) => b.type === "tool_result")).toBe(false);
     expectAllToolUsesPaired(messages);
   });
+
+  it("连续多条 tool_result 消息时多步扩窗，直到边界不再是 tool_result", async () => {
+    const history = new History();
+    // 旧历史凑数：索引 0-4
+    for (let i = 0; i < 5; i++) {
+      history.push(textMessage(i % 2 === 0 ? "user" : "assistant", `旧消息${i}`));
+    }
+    // 索引 5：assistant 一次发出两个 tool_use；
+    // 索引 6、7：两个 tool_result 拆成连续两条 user 消息
+    history.push({
+      role: "assistant",
+      content: [
+        { type: "tool_use", id: "tu_a", name: "Read", input: { file: "a.ts" } },
+        { type: "tool_use", id: "tu_b", name: "Read", input: { file: "b.ts" } },
+      ],
+    });
+    history.push({
+      role: "user",
+      content: [{ type: "tool_result", tool_use_id: "tu_a", content: "A内容" }],
+    });
+    history.push({
+      role: "user",
+      content: [{ type: "tool_result", tool_use_id: "tu_b", content: "B内容" }],
+    });
+    // 索引 8-16：9 条普通消息，总计 17 条 → 默认切点 17-10=7 恰是第二条 tool_result
+    for (let i = 0; i < 9; i++) {
+      history.push(
+        textMessage(i % 2 === 0 ? "assistant" : "user", `新消息${i}`)
+      );
+    }
+    expect(history.getMessages()).toHaveLength(17);
+    for (const idx of [6, 7]) {
+      expect(
+        history.getMessages()[idx].content.some((b) => b.type === "tool_result")
+      ).toBe(true);
+    }
+
+    const client = fakeClient("摘要");
+    const result = await forceCompact({
+      history,
+      client,
+      config: fakeConfig(1_000_000),
+    });
+    expect(result.compacted).toBe(true);
+
+    const messages = history.getMessages();
+    // 扩窗两格：摘要 + 12 条（从 tool_use 承载的 assistant 消息开始）
+    expect(messages).toHaveLength(13);
+    const keepFirst = messages[1];
+    expect(keepFirst.role).toBe("assistant");
+    expect(
+      keepFirst.content.filter((b) => b.type === "tool_use").map((b) => b.id)
+    ).toEqual(["tu_a", "tu_b"]);
+    expect(
+      messages[2].content.some(
+        (b) => b.type === "tool_result" && b.tool_use_id === "tu_a"
+      )
+    ).toBe(true);
+    expect(
+      messages[3].content.some(
+        (b) => b.type === "tool_result" && b.tool_use_id === "tu_b"
+      )
+    ).toBe(true);
+
+    // 保留窗口内每个 tool_result 都能在更早的保留消息里找到配对 tool_use
+    const keptToolUseIds = new Set(
+      messages.flatMap((m) =>
+        m.content.filter((b) => b.type === "tool_use").map((b) => b.id)
+      )
+    );
+    for (const m of messages) {
+      for (const b of m.content) {
+        if (b.type === "tool_result") {
+          expect(keptToolUseIds.has(b.tool_use_id)).toBe(true);
+        }
+      }
+    }
+  });
 });
 
 describe("forceCompact", () => {

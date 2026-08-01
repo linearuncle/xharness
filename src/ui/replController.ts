@@ -2,12 +2,16 @@ import type { Tool, ToolExecuteContext, ToolResult } from "../types/tools.js";
 
 export const STDIN_CLOSED_RESULT = "[无法获取用户输入——输入流已关闭]";
 
+/**
+ * 斜杠命令处理结果："exit" 退出 REPL；"handled" 已处理完毕；
+ * { turn } 表示命中技能等场景，需以给定文本作为本回合用户消息走正常回合。
+ */
+export type CommandOutcome = "exit" | "handled" | { turn: string };
+
 export interface ReplControllerOptions {
   runTurn: (input: string, signal: AbortSignal) => Promise<void>;
-  /** 处理 / 开头的命令；返回 "exit" 表示应退出 REPL */
-  runCommand: (
-    input: string
-  ) => "exit" | "handled" | Promise<"exit" | "handled">;
+  /** 处理 / 开头的命令 */
+  runCommand: (input: string) => CommandOutcome | Promise<CommandOutcome>;
   write: (text: string) => void;
   prompt: () => void;
   onExit: () => void;
@@ -62,17 +66,20 @@ export function createReplController(opts: ReplControllerOptions): ReplControlle
       while (queue.length > 0 && !exited) {
         const input = queue.shift()!.trim();
         if (input.length === 0) continue;
+        let turnInput = input;
         if (input.startsWith("/")) {
-          if ((await opts.runCommand(input)) === "exit") {
+          const outcome = await opts.runCommand(input);
+          if (outcome === "exit") {
             exit();
             return;
           }
-          continue;
+          if (outcome === "handled") continue;
+          turnInput = outcome.turn;
         }
         busy = true;
         activeController = new AbortController();
         try {
-          await opts.runTurn(input, activeController.signal);
+          await opts.runTurn(turnInput, activeController.signal);
         } catch (err) {
           opts.write(
             `错误: ${err instanceof Error ? err.message : String(err)}\n`

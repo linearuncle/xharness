@@ -99,6 +99,20 @@ describe("REPL controller 输入排队", () => {
     expect(h.prompts).toBe(0);
   });
 
+  it("runCommand 返回 { turn } 时以该文本走正常回合（技能触发路径）", async () => {
+    const h = setup({
+      runCommand: (input) =>
+        input === "/myskill" ? { turn: "技能指令体" } : "handled",
+    });
+    h.controller.handleLine("/myskill");
+    await tick();
+    expect(h.turns).toEqual(["技能指令体"]);
+    expect(h.controller.isBusy()).toBe(true);
+    h.finishTurn();
+    await tick();
+    expect(h.prompts).toBe(1);
+  });
+
   it("排队中的斜杠命令与普通输入统一按序处理", async () => {
     const h = setup();
     h.controller.handleLine("回合A");

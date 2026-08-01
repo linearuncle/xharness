@@ -18,6 +18,13 @@ import { createRenderer, renderTodos, type Renderer } from "./ui/render.js";
 import { createReplController } from "./ui/replController.js";
 import { createAskUserQuestionTool } from "./tools/askUserQuestion.js";
 import { createTodoWriteTool, type TodoStore } from "./tools/todoWrite.js";
+import { createSkillTool } from "./tools/skill.js";
+import { loadSkills, type Skill } from "./skills/loader.js";
+import {
+  buildHelpText,
+  buildUnknownCommandText,
+  dispatchSlash,
+} from "./ui/slashCommands.js";
 
 function readVersion(): string {
   const here = dirname(fileURLToPath(import.meta.url));
@@ -33,6 +40,7 @@ interface Session {
   system: string;
   renderer: Renderer;
   todoStore: TodoStore;
+  skills: Skill[];
 }
 
 function createSession(onTodosUpdate: (store: TodoStore) => void): Session {
@@ -40,17 +48,24 @@ function createSession(onTodosUpdate: (store: TodoStore) => void): Session {
   const registry = createDefaultRegistry();
   const client = createApiClient(config);
   const env = collectEnv(process.cwd());
+  const skills = loadSkills({ cwd: process.cwd() });
   const system = buildSystemPrompt({
     ...env,
     projectInstructions: loadProjectInstructions(process.cwd()),
-    skillSummaries: [],
+    skillSummaries: skills.map((s) => ({
+      name: s.name,
+      description: s.description,
+    })),
   });
   const renderer = createRenderer();
   const todoStore: TodoStore = { todos: [] };
   registry.register(
     createTodoWriteTool(todoStore, () => onTodosUpdate(todoStore))
   );
-  return { config, registry, client, system, renderer, todoStore };
+  if (skills.length > 0) {
+    registry.register(createSkillTool(skills));
+  }
+  return { config, registry, client, system, renderer, todoStore, skills };
 }
 
 async function runPrompt(userInput: string): Promise<void> {
@@ -84,23 +99,15 @@ async function runRepl(): Promise<void> {
     system: session.system,
   });
 
-  const handleSlashCommand = async (input: string): Promise<void> => {
-    if (input === "/clear") {
+  const handleBuiltin = async (command: string): Promise<"exit" | "handled"> => {
+    if (command === "exit") return "exit";
+    if (command === "clear") {
       history = new History();
       session.todoStore.todos = [];
       process.stdout.write("已清空会话历史与任务清单。\n");
-    } else if (input === "/help" || input.startsWith("/help ")) {
-      process.stdout.write(
-        [
-          "内置命令：",
-          "  /help     显示本帮助",
-          "  /clear    清空会话历史与任务清单",
-          "  /compact  手动压缩会话历史",
-          "  /exit     退出",
-          "技能列表将在 T5 支持。",
-        ].join("\n") + "\n"
-      );
-    } else if (input === "/compact" || input.startsWith("/compact ")) {
+    } else if (command === "help") {
+      process.stdout.write(buildHelpText(session.skills));
+    } else if (command === "compact") {
       const result = await forceCompact(compactDeps());
       if (result.compacted) {
         process.stdout.write(
@@ -109,9 +116,8 @@ async function runRepl(): Promise<void> {
       } else {
         process.stdout.write(`${result.warning ?? "未执行压缩。"}\n`);
       }
-    } else {
-      process.stdout.write(`未知命令: ${input}\n`);
     }
+    return "handled";
   };
 
   const controller = createReplController({
@@ -136,8 +142,17 @@ async function runRepl(): Promise<void> {
       });
     },
     runCommand: async (input) => {
-      if (input === "/exit") return "exit";
-      await handleSlashCommand(input);
+      const dispatch = dispatchSlash(input, session.skills);
+      if (dispatch.kind === "builtin") {
+        return handleBuiltin(dispatch.command);
+      }
+      if (dispatch.kind === "skill") {
+        process.stdout.write(`[触发技能 ${dispatch.skill.name}]\n`);
+        return { turn: dispatch.message };
+      }
+      process.stdout.write(
+        buildUnknownCommandText(dispatch.command, session.skills)
+      );
       return "handled";
     },
     write: (text) => process.stdout.write(text),
