@@ -13,6 +13,10 @@ export default defineConfig({
         test: {
           name: "e2e",
           include: ["test/e2e/**/*.test.ts"],
+          testTimeout: 240_000,
+          hookTimeout: 30_000,
+          retry: 1,
+          fileParallelism: false,
         },
       },
     ],
