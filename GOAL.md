@@ -16,6 +16,7 @@
 | 语言 / 运行时 | TypeScript，Node.js >= 20，ESM |
 | LLM 接口 | 仅 Anthropic Messages API（官方 `@anthropic-ai/sdk`），流式（streaming）输出 |
 | 默认模型 | `claude-sonnet-5`，可用 `XHARNESS_MODEL` 环境变量覆盖 |
+| API 端点 | 默认官方端点，可用 `ANTHROPIC_BASE_URL` 环境变量指向任意 Anthropic 兼容端点（如 DeepSeek）——测试依赖此能力，必须实现 |
 | API Key | 读 `ANTHROPIC_API_KEY` 环境变量，缺失时启动报错并提示 |
 | 权限模式 | 仅 YOLO：所有工具直接执行，无确认弹窗、无权限系统 |
 | CLI 形态 | 终端 REPL 交互（stdin/stdout），入口命令 `xharness`，无 TUI 框架依赖（不用 ink/blessed，用 ANSI 转义即可） |
@@ -139,16 +140,44 @@ description 文本是工具质量的核心，须参照 Claude Code 的措辞风�
 | T4 上下文 | F4 compact（自动+手动）、F12 项目指令文件 | 超长会话压缩后可继续 |
 | T5 技能 | F13-F16 Skills 系统 + 内置命令 | 自定义技能可被 `/name` 和模型两种方式触发 |
 
-## 6. 验证命令（Worker 每个任务收尾必跑）
+## 6. 验证方案
+
+### 6.1 静态验证（Worker 每个任务收尾必跑）
 
 ```bash
 npm run build        # tsc 编译
 npx tsc --noEmit     # 类型检查
-npm test             # vitest
+npm test             # vitest 单测（一律 mock API，不发真实请求）
 ```
 
-需要真实 API 的端到端验证仅在 T2/T3 出口做，跑前确认 `ANTHROPIC_API_KEY` 已设置；
-单测一律 mock API，不消耗真实 token。
+### 6.2 大量端到端 / 集成测试（用 DeepSeek Anthropic 兼容端点）
+
+真实 LLM 参与的测试统一走 DeepSeek 的 Anthropic 兼容端点 + 轻量 flash 类模型，
+成本低、可大量跑，用于 T2 之后每个 tranche 的出口验证与回归：
+
+```bash
+export ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic
+export ANTHROPIC_API_KEY=$DEEPSEEK_API_KEY
+export XHARNESS_MODEL=<flash 轻量模型>   # 具体模型名由用户提供，写入 .env.test，不硬编码
+npm run test:e2e
+```
+
+- E2E 用例形态：脚本驱动 harness 完成小型 coding 任务（读文件回答、新建并运行脚本、
+  Edit 修改函数后跑测试、触发 compact、技能调用等），断言最终产物与工具调用序列。
+- 每个用例在**独立临时工作目录**（fixture 沙箱）中运行，绝不在 xharness 仓库本身或
+  用户目录里跑；用例结束清理临时目录（由测试框架清理，不由被测模型执行）。
+- 官方 Anthropic 端点 + 真实 Claude 模型仅在 T2/T3 出口各做一次冒烟，以及第 8 节
+  最终完成演示时使用，控制成本。
+
+### 6.3 测试安全红线（破坏性防护）
+
+- **测试提示词中禁止要求模型执行破坏性操作**：`rm`/`rm -rf`、`rmdir`、`git reset --hard`、
+  `git push`、`git clean`、`chmod`/`chown`、`kill`、`sudo`、写 `/etc`、`> /dev/*` 等一律不出现在用例中。
+- E2E 断言层增加**工具调用审计**：每个用例结束后扫描本次全部 Bash 调用记录，
+  若命中上述破坏性命令模式则该用例直接判失败（即使任务结果正确）——
+  既保护环境，也回归检测模型是否越权。
+- 沙箱临时目录用随机路径且不含任何真实项目文件；测试环境变量与用户真实
+  `ANTHROPIC_API_KEY` 隔离（用 `.env.test` 注入）。
 
 ## 7. 明确不做（Worker 不得顺手实现，发现需求缺口升级 Judge）
 
@@ -164,7 +193,7 @@ npm test             # vitest
 ## 8. 完成标准（Judge 审定整个 goal）
 
 1. 六个 tranche 全部通过出口标准；
-2. `npm run build`、`npx tsc --noEmit`、`npm test` 全绿；
+2. `npm run build`、`npx tsc --noEmit`、`npm test` 全绿，`npm run test:e2e`（DeepSeek 端点）全绿；
 3. 端到端演示：在任意真实项目目录运行 `xharness`，让模型完成
    「找到某个函数并修改它，然后跑测试验证」的完整闭环，全程无人工干预（除 AskUserQuestion 作答）；
 4. README.md 覆盖：安装、配置 API key、启动、斜杠命令、技能编写方法。
