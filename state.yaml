@@ -183,8 +183,66 @@ tranches:
         title: F13 loader + F14 用户触发 + F15 Skill 元工具与 skillSummaries 注入 + F16 内置命令优先级与 /help 完整化
         allowed_files: [src/skills/**, src/tools/skill.ts, src/index.ts, src/ui/**, test/unit/**]
         verify: [npm run build, npx tsc --noEmit, npm test]
-        status: active
-        receipt: null
+        status: done
+        receipt: |
+          result: done. commit 42f888c。125/125 绿（+26）。loader 可注入目录、项目覆盖全局、
+          损坏 frontmatter 警告跳过；Skill 元工具未知名 is_error 列可用；dispatchSlash 纯函数
+          内置命令优先；/help 完整化撤占位；-p 不做斜杠。Judge 缺口（compact 多步扩窗单测）已补。
+      - id: T5.2
+        kind: pm
+        title: T5 出口冒烟（/name 与模型两种触发）
+        status: done
+        receipt: |
+          沙箱 .xharness/skills/greet：/help 列出技能；/greet 触发按 body 执行 Write+Read
+          产物正确；模型经 Skill 工具查指令后执行变体任务产物正确。两种触发均验证通过。
+    judge: |
+      approve。现场复验 125/125 绿；F13-F16 逐条合规；冒烟 Judge 亲自复跑两种触发均过；
+      全局终审：工具口径 9 兑现、铁律零违规、最大文件 223 行、§7 无越界、依赖未越界。
+      既定语义：技能覆盖以 frontmatter name（缺目录名兜底）为键，项目级后写覆盖。
+  T6:
+    title: 收尾（Judge 布置 G1-G4）
+    status: active
+    tasks:
+      - id: G1
+        kind: worker
+        title: E2E 套件（§6.2/§6.3：fixture 沙箱、无 key skip、破坏性审计、子序列断言、五场景覆盖）
+        allowed_files: [test/e2e/**, .env.test.example, package.json(scripts 仅), vitest.config.ts]
+        verify: [npm run build, npx tsc --noEmit, npm test, npm run test:e2e]
+        status: done
+        receipt: |
+          result: done. commit c7e2f05。五场景 E2E 首轮 5/5 全绿（23.5s，flash）；
+          单测 125/125 不受影响。runXharness 沙箱驱动（-p 与管道 REPL 双模式）、
+          无 key describe.skipIf 整体 skip、词边界破坏性审计、产物/子序列断言、
+          e2e project retry:1 串行 240s 超时；test:e2e 前置 npm run build。
+      - id: G2
+        kind: worker
+        title: README.md（§8.4：安装/配置/启动/斜杠命令/技能编写/YOLO 风险声明/B1 限制）
+        allowed_files: [README.md]
+        status: done
+        receipt: |
+          result: done. commit 8076e85。八项全覆盖且逐一与代码实际行为核对；
+          YOLO 风险独立醒目章节；B1 按板上措辞写入。备注：test:e2e 无 key skip
+          行为描述以 G1 最终实现为准，如有出入需一句话跟改。
+      - id: G3
+        kind: pm(herdr 真 TTY)
+        title: §8.3 最终演示（真实项目找函数改函数跑测试闭环）+ T3 条件项 TTY 实测
+        status: done
+        receipt: |
+          herdr 真 TTY 窗格、真实 git 演示项目（含 bug 的 add 函数）：
+          1) 核心闭环：模型 Glob→Read×3→Edit→Bash，一次修复 a-b→a+b，ALL TESTS PASS，
+             全程无人工干预；AGENTS.md 中文指令生效；PM 独立复跑 test.mjs 通过，diff 恰一行。
+          2) busy 期 Ctrl+C：sleep 25 执行中发 SIGINT → "[正在中断当前回合…]"、
+             SIGTERM 进程组、"[回合已中断]"、秒回提示符。
+          3) AskUserQuestion 现场作答：选项渲染正确，输 1 → "用户选择: staging"、模型正确复述。
+          备注：TTY 实测由 PM 经 herdr 驱动（真实 TTY 语义）；用户本人可随时重复验证。
+      - id: G4
+        kind: pm
+        title: 可选：BASE_URL 覆盖一次性验证
+        status: done
+        receipt: |
+          无官方 Anthropic key，改用本地一次性 HTTP 服务验证机制：
+          ANTHROPIC_BASE_URL=http://127.0.0.1:39871 时请求实际命中该端点
+          （HIT: POST /v1/messages），错误体正确透传。覆盖机制可用。
     judge: pending
 
 known_limitations:
