@@ -1,10 +1,16 @@
 import { spawnSync } from "node:child_process";
 
+/** thinking 档位：就这四档，不多不少（DeepSeek Anthropic 端点 reasoning.effort） */
+export const EFFORT_LEVELS = ["none", "low", "high", "max"] as const;
+export type EffortLevel = (typeof EFFORT_LEVELS)[number];
+
 export interface Config {
   apiKey: string;
   baseUrl: string;
   model: string;
   contextWindow: number;
+  /** 未设置 = 不传 reasoning 参数（端点默认 high） */
+  effort?: EffortLevel;
 }
 
 const DEFAULT_BASE_URL = "https://api.deepseek.com/anthropic";
@@ -47,7 +53,18 @@ export function loadConfig(): Config {
     contextWindow = parsed;
   }
 
+  let effort: EffortLevel | undefined;
+  const rawEffort = process.env.XHARNESS_EFFORT;
+  if (rawEffort) {
+    if (!(EFFORT_LEVELS as readonly string[]).includes(rawEffort)) {
+      throw new Error(
+        `XHARNESS_EFFORT 无效："${rawEffort}"，可选档位：${EFFORT_LEVELS.join(" | ")}`
+      );
+    }
+    effort = rawEffort as EffortLevel;
+  }
+
   checkRipgrep();
 
-  return { apiKey, baseUrl, model, contextWindow };
+  return { apiKey, baseUrl, model, contextWindow, effort };
 }

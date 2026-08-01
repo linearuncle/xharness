@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { Config } from "../config.js";
+import type { Config, EffortLevel } from "../config.js";
 import type {
   AgentEvent,
   ContentBlock,
@@ -30,6 +30,8 @@ export interface StreamMessageOptions {
   tools: ApiToolDefinition[];
   model: string;
   maxTokens: number;
+  /** thinking 档位；未设置时不传 reasoning 参数（端点默认 high） */
+  effort?: EffortLevel;
   signal?: AbortSignal;
   onEvent: (event: AgentEvent) => void;
 }
@@ -50,6 +52,7 @@ export type RawStreamEvent =
       index: number;
       content_block:
         | { type: "text"; text?: string }
+        | { type: "thinking"; thinking?: string }
         | { type: "tool_use"; id: string; name: string; input?: unknown };
     }
   | {
@@ -57,6 +60,7 @@ export type RawStreamEvent =
       index: number;
       delta:
         | { type: "text_delta"; text: string }
+        | { type: "thinking_delta"; thinking: string }
         | { type: "input_json_delta"; partial_json: string };
     }
   | { type: "content_block_stop"; index: number }
@@ -69,6 +73,8 @@ export interface StreamRequestParams {
   system: string;
   messages: Message[];
   tools: ApiToolDefinition[];
+  /** DeepSeek Anthropic 端点扩展字段（Thinking Mode）；未设置不携带 */
+  reasoning?: { effort: EffortLevel };
 }
 
 export type StreamFn = (
@@ -126,6 +132,10 @@ async function consumeStream(
           if (block?.type === "text") block.text += event.delta.text;
           markEmitted();
           onEvent({ type: "text_delta", text: event.delta.text });
+        } else if (event.delta.type === "thinking_delta") {
+          // thinking 内容只渲染：不聚合进返回 content、不入 history（GOAL F19 明确不做）
+          markEmitted();
+          onEvent({ type: "thinking_delta", text: event.delta.thinking });
         } else if (event.delta.type === "input_json_delta") {
           jsonAcc.set(event.index, (jsonAcc.get(event.index) ?? "") + event.delta.partial_json);
         }
@@ -170,6 +180,7 @@ export function createApiClientFromStreamFn(
         messages: opts.messages,
         tools: opts.tools,
       };
+      if (opts.effort) params.reasoning = { effort: opts.effort };
       let attempt = 0;
       for (;;) {
         if (opts.signal?.aborted) throw new ApiError("请求已被中止");
@@ -197,17 +208,23 @@ export function createApiClient(config: Config): ApiClient {
     maxRetries: 0,
   });
   const streamFn: StreamFn = async (params, signal) => {
-    const stream = await sdk.messages.create(
-      {
-        model: params.model,
-        max_tokens: params.max_tokens,
-        system: params.system,
-        messages: params.messages as unknown as Anthropic.MessageParam[],
-        tools: params.tools as unknown as Anthropic.ToolUnion[],
-        stream: true,
-      },
-      { signal }
-    );
+    const request: Anthropic.MessageCreateParamsStreaming = {
+      model: params.model,
+      max_tokens: params.max_tokens,
+      system: params.system,
+      messages: params.messages as unknown as Anthropic.MessageParam[],
+      tools: params.tools as unknown as Anthropic.ToolUnion[],
+      stream: true,
+    };
+    if (params.reasoning) {
+      // reasoning 是 DeepSeek Anthropic 端点扩展字段，SDK 类型不认识，最小范围 as 透传
+      (
+        request as Anthropic.MessageCreateParamsStreaming & {
+          reasoning?: { effort: EffortLevel };
+        }
+      ).reasoning = params.reasoning;
+    }
+    const stream = await sdk.messages.create(request, { signal });
     return stream as unknown as AsyncIterable<RawStreamEvent>;
   };
   return createApiClientFromStreamFn(streamFn);

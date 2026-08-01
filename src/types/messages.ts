@@ -35,6 +35,7 @@ export type StopReason =
 
 export type AgentEvent =
   | { type: "text_delta"; text: string }
+  | { type: "thinking_delta"; text: string }
   | { type: "tool_start"; id: string; name: string; input: Record<string, unknown> }
   | { type: "tool_end"; id: string; name: string; result: string; isError: boolean }
   | { type: "error"; message: string }

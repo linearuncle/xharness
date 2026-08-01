@@ -63,6 +63,7 @@ export async function runTurn(opts: RunTurnOptions): Promise<void> {
         tools: registry.list(),
         model: config.model,
         maxTokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
+        effort: config.effort,
         signal,
         onEvent,
       });

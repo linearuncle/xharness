@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildEffortStatusText,
   buildHelpText,
   buildUnknownCommandText,
   dispatchSlash,
+  parseEffortArg,
 } from "../../src/ui/slashCommands.js";
 import type { Skill } from "../../src/skills/loader.js";
 
@@ -17,10 +19,23 @@ describe("dispatchSlash", () => {
     expect(result).toEqual({ kind: "builtin", command: "help", args: "" });
   });
 
-  it("四个内置命令都识别为 builtin", () => {
-    for (const cmd of ["help", "clear", "compact", "exit"] as const) {
+  it("五个内置命令都识别为 builtin", () => {
+    for (const cmd of ["help", "clear", "compact", "effort", "exit"] as const) {
       expect(dispatchSlash(`/${cmd}`, skills).kind).toBe("builtin");
     }
+  });
+
+  it("/effort 带档位参数解析为 builtin + args", () => {
+    expect(dispatchSlash("/effort none", skills)).toEqual({
+      kind: "builtin",
+      command: "effort",
+      args: "none",
+    });
+    expect(dispatchSlash("/effort", skills)).toEqual({
+      kind: "builtin",
+      command: "effort",
+      args: "",
+    });
   });
 
   it("命中技能且无参数：消息即技能 body", () => {
@@ -56,7 +71,7 @@ describe("dispatchSlash", () => {
 describe("/help 文本", () => {
   it("列出内置命令与技能（name — description），无 T5 占位", () => {
     const text = buildHelpText(skills);
-    for (const cmd of ["/help", "/clear", "/compact", "/exit"]) {
+    for (const cmd of ["/help", "/clear", "/compact", "/effort", "/exit"]) {
       expect(text).toContain(cmd);
     }
     expect(text).toContain("/commit — 生成提交");
@@ -67,6 +82,33 @@ describe("/help 文本", () => {
     const text = buildHelpText([]);
     expect(text).toContain("暂无已加载技能");
     expect(text).toContain(".xharness/skills");
+  });
+});
+
+describe("/effort 辅助函数", () => {
+  it("四档合法值解析成功", () => {
+    for (const level of ["none", "low", "high", "max"] as const) {
+      expect(parseEffortArg(level)).toEqual({ ok: true, value: level });
+    }
+  });
+
+  it("非法值报错并列出四档", () => {
+    const result = parseEffortArg("medium");
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error).toContain("medium");
+    expect(result.error).toContain("none | low | high | max");
+  });
+
+  it("无参状态文案：未设置时提示端点默认 high", () => {
+    const text = buildEffortStatusText(undefined);
+    expect(text).toContain("未设置");
+    expect(text).toContain("high");
+    expect(text).toContain("none | low | high | max");
+  });
+
+  it("无参状态文案：显示当前档位", () => {
+    expect(buildEffortStatusText("max")).toContain("当前 thinking 档位: max");
   });
 });
 

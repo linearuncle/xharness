@@ -31,6 +31,7 @@ npm link                  # 可选：得到全局 xharness 命令
 | `ANTHROPIC_BASE_URL` | 否 | `https://api.deepseek.com/anthropic` | 可覆盖为官方 Anthropic 或其他 Anthropic 兼容端点 |
 | `XHARNESS_MODEL` | 否 | `deepseek-v4-pro` | 模型 ID，如 `deepseek-v4-flash`、claude 系列 |
 | `XHARNESS_CONTEXT_WINDOW` | 否 | 内置模型表 | 上下文窗口 token 数（正整数）。内置表：`deepseek-v4-*` 为 1M，未知模型默认 200K |
+| `XHARNESS_EFFORT` | 否 | 未设置（= 端点默认 `high`） | thinking 档位：`none` / `low` / `high` / `max`，见下文 Thinking 章节 |
 
 示例：
 
@@ -61,12 +62,38 @@ xharness --version          # 打印版本
 | `/help` | 列出内置命令与已加载的技能 |
 | `/clear` | 清空会话历史与任务清单 |
 | `/compact` | 手动压缩会话历史 |
+| `/effort [档位]` | 查看或切换 thinking 档位（none/low/high/max），见下文 Thinking 章节 |
 | `/exit` | 退出 |
 | `/<技能名> [参数]` | 触发同名技能（见下节）。内置命令优先级高于同名技能 |
 
 ### 项目指令文件
 
 启动时读取当前目录下的 `AGENTS.md` 注入系统提示；不存在则回退读取 `CLAUDE.md`；都不存在则跳过。
+
+## Thinking 思考档位
+
+对接 DeepSeek Anthropic 端点的 Thinking Mode：请求携带 `"reasoning": {"effort": "<档位>"}`，模型的思考内容以**暗色（ANSI dim）**流式打印在正文之前，与正文之间以空行分隔。思考内容只做展示，**不进入会话历史**。
+
+四档（不多不少）：
+
+| 档位 | 含义 |
+|---|---|
+| `none` | 关闭思考，直接作答 |
+| `low` | 低强度思考 |
+| `high` | 高强度思考（**端点默认**：不传参数时即此档） |
+| `max` | 最大强度思考 |
+
+设置方式：
+
+- **启动默认**：环境变量 `XHARNESS_EFFORT`（非法值启动报错并列出四档）；不设置则不携带 `reasoning` 参数，行为等同端点默认 `high`。
+- **会话内切换**：`/effort <档位>`，下一回合生效；`/effort` 无参数打印当前档位与可选值。
+
+注意事项：
+
+- **v4-pro 映射现状**：按 DeepSeek 官方文档，`deepseek-v4-pro` 当前会把 `low` 映射为 `high`（即 pro 上 low 与 high 行为一致）；`deepseek-v4-flash` 四档均有效。
+- **实测现状（2026-08-01）**：直连端点探测发现 `reasoning.effort` 疑似被端点忽略——`none` 档下 flash/pro 仍会输出思考内容，非法档位值也被静默接受。xharness 仍按文档携带该参数，端点侧行为以 DeepSeek 上游为准。
+- **计费提示**：思考内容同样计入输出 token 计费，`max` 档思考 token 消耗显著增加；对简单任务可用 `none`/`low` 降低延迟与成本。
+- `budget_tokens`（Anthropic 官方 thinking 参数）被 DeepSeek 端点忽略，xharness 不实现。
 
 ## 技能编写
 

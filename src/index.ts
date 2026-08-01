@@ -21,9 +21,11 @@ import { createTodoWriteTool, type TodoStore } from "./tools/todoWrite.js";
 import { createSkillTool } from "./tools/skill.js";
 import { loadSkills, type Skill } from "./skills/loader.js";
 import {
+  buildEffortStatusText,
   buildHelpText,
   buildUnknownCommandText,
   dispatchSlash,
+  parseEffortArg,
 } from "./ui/slashCommands.js";
 
 function readVersion(): string {
@@ -99,7 +101,10 @@ async function runRepl(): Promise<void> {
     system: session.system,
   });
 
-  const handleBuiltin = async (command: string): Promise<"exit" | "handled"> => {
+  const handleBuiltin = async (
+    command: string,
+    args: string
+  ): Promise<"exit" | "handled"> => {
     if (command === "exit") return "exit";
     if (command === "clear") {
       history = new History();
@@ -107,6 +112,21 @@ async function runRepl(): Promise<void> {
       process.stdout.write("已清空会话历史与任务清单。\n");
     } else if (command === "help") {
       process.stdout.write(buildHelpText(session.skills));
+    } else if (command === "effort") {
+      if (!args) {
+        process.stdout.write(buildEffortStatusText(session.config.effort));
+      } else {
+        const parsed = parseEffortArg(args);
+        if (parsed.ok) {
+          // 会话级 effort：存 session 层，runTurn 每回合取当前 config.effort，下一回合生效
+          session.config = { ...session.config, effort: parsed.value };
+          process.stdout.write(
+            `thinking 档位已切换为 ${parsed.value}（下一回合生效）。\n`
+          );
+        } else {
+          process.stdout.write(parsed.error);
+        }
+      }
     } else if (command === "compact") {
       const result = await forceCompact(compactDeps());
       if (result.compacted) {
@@ -144,7 +164,7 @@ async function runRepl(): Promise<void> {
     runCommand: async (input) => {
       const dispatch = dispatchSlash(input, session.skills);
       if (dispatch.kind === "builtin") {
-        return handleBuiltin(dispatch.command);
+        return handleBuiltin(dispatch.command, dispatch.args);
       }
       if (dispatch.kind === "skill") {
         process.stdout.write(`[触发技能 ${dispatch.skill.name}]\n`);

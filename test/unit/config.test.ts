@@ -39,4 +39,24 @@ describe("loadConfig", () => {
     vi.stubEnv("XHARNESS_CONTEXT_WINDOW", "not-a-number");
     expect(() => loadConfig()).toThrow(/XHARNESS_CONTEXT_WINDOW/);
   });
+
+  it("XHARNESS_EFFORT 未设置时 effort 为 undefined", () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "test-key");
+    vi.stubEnv("XHARNESS_EFFORT", "");
+    expect(loadConfig().effort).toBeUndefined();
+  });
+
+  it("XHARNESS_EFFORT 四档合法值均可解析", () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "test-key");
+    for (const level of ["none", "low", "high", "max"] as const) {
+      vi.stubEnv("XHARNESS_EFFORT", level);
+      expect(loadConfig().effort).toBe(level);
+    }
+  });
+
+  it("XHARNESS_EFFORT 非法值抛错并列出四档", () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "test-key");
+    vi.stubEnv("XHARNESS_EFFORT", "medium");
+    expect(() => loadConfig()).toThrow(/none \| low \| high \| max/);
+  });
 });

@@ -4,6 +4,7 @@ import {
   createApiClientFromStreamFn,
   type RawStreamEvent,
   type StreamMessageOptions,
+  type StreamRequestParams,
 } from "../../src/api/client.js";
 import type { AgentEvent } from "../../src/types/messages.js";
 
@@ -96,6 +97,66 @@ describe("api client", () => {
     const err = await client.streamMessage(baseOptions(() => {})).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ApiError);
     expect((err as ApiError).status).toBe(400);
+    expect(calls).toBe(1);
+  });
+
+  it("effort 有值时请求体带 reasoning.effort，未设置时不带 reasoning 字段", async () => {
+    const captured: StreamRequestParams[] = [];
+    const client = createApiClientFromStreamFn(async (params) => {
+      captured.push(params);
+      return toStream(textAndToolEvents);
+    }, []);
+
+    await client.streamMessage({ ...baseOptions(() => {}), effort: "low" });
+    expect(captured[0].reasoning).toEqual({ effort: "low" });
+
+    await client.streamMessage({ ...baseOptions(() => {}), effort: "none" });
+    expect(captured[1].reasoning).toEqual({ effort: "none" });
+
+    await client.streamMessage(baseOptions(() => {}));
+    expect(captured[2]).not.toHaveProperty("reasoning");
+  });
+
+  it("thinking_delta 事件即时发出，thinking 内容不进返回 content", async () => {
+    const thinkingEvents: RawStreamEvent[] = [
+      { type: "message_start" },
+      { type: "content_block_start", index: 0, content_block: { type: "thinking" } },
+      { type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "先比较" } },
+      { type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "小数位" } },
+      { type: "content_block_stop", index: 0 },
+      { type: "content_block_start", index: 1, content_block: { type: "text", text: "" } },
+      { type: "content_block_delta", index: 1, delta: { type: "text_delta", text: "9.8" } },
+      { type: "content_block_stop", index: 1 },
+      { type: "message_delta", delta: { stop_reason: "end_turn" } },
+      { type: "message_stop" },
+    ];
+    const client = createApiClientFromStreamFn(async () => toStream(thinkingEvents), []);
+    const events: AgentEvent[] = [];
+    const result = await client.streamMessage(baseOptions((e) => events.push(e)));
+
+    expect(events).toEqual([
+      { type: "thinking_delta", text: "先比较" },
+      { type: "thinking_delta", text: "小数位" },
+      { type: "text_delta", text: "9.8" },
+    ]);
+    expect(result.stopReason).toBe("end_turn");
+    expect(result.content).toEqual([{ type: "text", text: "9.8" }]);
+  });
+
+  it("已发 thinking_delta 后可重试错误不再重试（与 text_delta 同语义）", async () => {
+    let calls = 0;
+    async function* thinkingThenFail(): AsyncGenerator<RawStreamEvent> {
+      yield { type: "content_block_start", index: 0, content_block: { type: "thinking" } };
+      yield { type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "想…" } };
+      throw Object.assign(new Error("stream broke"), { status: 500 });
+    }
+    const client = createApiClientFromStreamFn(async () => {
+      calls++;
+      return thinkingThenFail();
+    }, [0, 0, 0]);
+
+    const err = await client.streamMessage(baseOptions(() => {})).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
     expect(calls).toBe(1);
   });
 

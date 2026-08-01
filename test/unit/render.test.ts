@@ -97,6 +97,40 @@ describe("createRenderer", () => {
     expect(stdout.text).toBe("思考中\n⏺ Glob(pattern: *.ts)\n");
   });
 
+  it("thinking_delta 以 ANSI dim 包裹渲染", () => {
+    const { renderer, stdout } = makeRenderer();
+    renderer.onEvent({ type: "thinking_delta", text: "先想" });
+    renderer.onEvent({ type: "thinking_delta", text: "一想" });
+    expect(stdout.text).toBe("\x1b[2m先想\x1b[22m\x1b[2m一想\x1b[22m");
+  });
+
+  it("thinking 段结束后首个正文前补空行分隔", () => {
+    const { renderer, stdout } = makeRenderer();
+    renderer.onEvent({ type: "thinking_delta", text: "推理中" });
+    renderer.onEvent({ type: "text_delta", text: "答案是 9.8" });
+    expect(stdout.text).toBe("\x1b[2m推理中\x1b[22m\n\n答案是 9.8");
+  });
+
+  it("thinking 段结束后 tool_start 前同样有视觉分隔", () => {
+    const { renderer, stdout } = makeRenderer();
+    renderer.onEvent({ type: "thinking_delta", text: "该读文件了" });
+    renderer.onEvent({
+      type: "tool_start",
+      id: "t1",
+      name: "Read",
+      input: { file_path: "a.ts" },
+    });
+    expect(stdout.text).toBe(
+      "\x1b[2m该读文件了\x1b[22m\n\n⏺ Read(file_path: a.ts)\n"
+    );
+  });
+
+  it("无 thinking 时正文渲染不受影响（无多余空行）", () => {
+    const { renderer, stdout } = makeRenderer();
+    renderer.onEvent({ type: "text_delta", text: "直接作答" });
+    expect(stdout.text).toBe("直接作答");
+  });
+
   it("error 写入 stderr", () => {
     const { renderer, stderr } = makeRenderer();
     renderer.onEvent({ type: "error", message: "网络异常" });
