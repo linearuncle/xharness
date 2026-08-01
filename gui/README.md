@@ -53,6 +53,6 @@ GUI 与 CLI 完全一致：模型发起的文件读写与 shell 命令在你的�
 首次启动需勾选确认后方可使用。
 
 - 只在可信任务与非关键目录使用；重要数据先做好版本控制/备份
-- "手动填写"的 API Key 明文保存在 `~/.xharness/gui/settings.jsonl`，更推荐环境变量模式
+- "手动填写"的 API Key 经 `safeStorage`（系统钥匙串）加密后存于 `~/.xharness/gui/settings.jsonl`（权限 600），磁盘零明文
 - 附件与粘贴的图片保存在 `~/.xharness/gui/attachments/`
 - 风险自负；威胁模型与漏洞报告见仓库根目录 `SECURITY.md`

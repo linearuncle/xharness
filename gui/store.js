@@ -5,10 +5,32 @@
 // 全部只追加不重写；启动时重放重建内存态。旧 state.json 自动迁移。
 import {
   readFileSync, writeFileSync, appendFileSync, mkdirSync,
-  readdirSync, existsSync, renameSync, rmSync,
+  readdirSync, existsSync, renameSync, rmSync, chmodSync,
 } from "node:fs";
 import { homedir } from "node:os";
 import { join, basename } from "node:path";
+import { safeStorage } from "electron";
+
+// ---- API Key 加密（safeStorage：加密密钥存系统钥匙串，磁盘零明文）----
+function canEncrypt() {
+  try { return safeStorage.isEncryptionAvailable(); } catch { return false; }
+}
+function encryptKey(plain) {
+  if (!plain) return "";
+  if (!canEncrypt()) {
+    console.warn("store: safeStorage 不可用，拒绝保存明文 key");
+    return "";
+  }
+  return safeStorage.encryptString(plain).toString("base64");
+}
+function decryptKey(enc) {
+  if (!enc) return "";
+  try {
+    return safeStorage.decryptString(Buffer.from(enc, "base64"));
+  } catch {
+    return "";
+  }
+}
 
 const DIR = join(homedir(), ".xharness", "gui");
 const SESS_DIR = join(DIR, "sessions");
@@ -148,30 +170,78 @@ export function load() {
     appendLine(SETTINGS_FILE, { op: "upsert", provider: DEFAULT_PROVIDER, ts: Date.now() });
   }
 
+  // 明文 key 迁移：内存态加密 + 整文件重写，清除历史行里的明文
+  let raw = "";
+  try { raw = readFileSync(SETTINGS_FILE, "utf8"); } catch { /* 无文件 */ }
+  const hasPlaintextOnDisk = /"apiKey"\s*:\s*"[^"]+"/.test(raw);
+  let migrated = false;
+  for (const p of providers) {
+    if (p.apiKey) {
+      p.apiKeyEnc = encryptKey(p.apiKey);
+      delete p.apiKey;
+      migrated = true;
+    }
+  }
+  if (migrated || hasPlaintextOnDisk) {
+    rewriteSettings();
+    console.log("store: 已迁移 API Key 至加密存储并清除历史明文");
+  }
+  try { chmodSync(SETTINGS_FILE, 0o600); } catch { /* 文件可能不存在 */ }
+
   return { projects, conversations };
+}
+
+// 以当前内存态整文件重写（迁移/换 key 时用，日常仍是追加）
+function rewriteSettings() {
+  let out = "";
+  for (const p of providers) {
+    out += line({ op: "upsert", provider: p, ts: Date.now() });
+  }
+  writeFileSync(SETTINGS_FILE, out);
+  try { chmodSync(SETTINGS_FILE, 0o600); } catch { /* noop */ }
+}
+
+// 解密取 key（仅主进程内部使用，不经 IPC）
+export function getProviderKey(id) {
+  const p = providers.find((x) => x.id === id);
+  if (!p) return "";
+  if (p.apiKeyEnc) return decryptKey(p.apiKeyEnc);
+  return p.apiKey ?? "";
 }
 
 export function getProviders() {
   return providers;
 }
 
-// 给渲染进程的脱敏视图：不下发 apiKey 明文
+// 给渲染进程的脱敏视图：既不下发明文也不下发密文
 export function getProvidersSafe() {
-  return providers.map((p) => ({ ...p, apiKey: "", hasKey: !!p.apiKey }));
+  return providers.map((p) => {
+    const { apiKey, apiKeyEnc, ...rest } = p;
+    return { ...rest, apiKey: "", hasKey: !!(apiKeyEnc || apiKey) };
+  });
 }
 
 export function upsertProvider(p) {
-  const i = providers.findIndex((x) => x.id === p.id);
-  if (i >= 0) providers[i] = p;
-  else providers.push(p);
-  appendLine(SETTINGS_FILE, { op: "upsert", provider: p, ts: Date.now() });
+  const clean = { ...p };
+  const existing = providers.find((x) => x.id === p.id);
+  if (clean.apiKey) {
+    clean.apiKeyEnc = encryptKey(clean.apiKey); // 新输入的明文 → 立即加密
+  } else if (existing?.apiKeyEnc) {
+    clean.apiKeyEnc = existing.apiKeyEnc; // 留空 = 保持原 key
+  }
+  delete clean.apiKey;
+  const i = providers.findIndex((x) => x.id === clean.id);
+  if (i >= 0) providers[i] = clean;
+  else providers.push(clean);
+  // 换 key 属敏感变更：整文件重写，不在历史里留旧密文
+  rewriteSettings();
 }
 
 export function deleteProvider(id) {
   const p = providers.find((x) => x.id === id);
   if (!p || p.builtin) return; // 内置供应商不可删
   providers = providers.filter((x) => x.id !== id);
-  appendLine(SETTINGS_FILE, { op: "delete", id, ts: Date.now() });
+  rewriteSettings(); // 删除供应商时连历史密文一并清掉
 }
 
 export function addProject(dir) {

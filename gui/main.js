@@ -114,12 +114,9 @@ ipcMain.handle("settings:upsert", (_e, provider) => {
   if (!provider?.id || !provider?.name || !provider?.baseUrl) {
     return { ok: false, error: "名称与 Base URL 必填" };
   }
-  // 渲染进程拿到的是脱敏对象：apiKey 留空表示"保持原 key 不变"
-  const existing = store.getProviders().find((p) => p.id === provider.id);
-  if (provider.keyMode === "manual" && !provider.apiKey && existing?.apiKey) {
-    provider.apiKey = existing.apiKey;
-  }
+  // apiKey 留空表示"保持原 key"；非空明文由 store 层立即加密落盘
   delete provider.hasKey;
+  delete provider.apiKeyEnc; // 密文不接受来自渲染进程
   store.upsertProvider(provider);
   return { ok: true, providers: store.getProvidersSafe() };
 });

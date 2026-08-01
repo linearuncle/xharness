@@ -48,8 +48,9 @@ export function defaultChoice() {
 
 function resolveKey(provider) {
   if (provider.keyMode === "manual") {
-    if (provider.apiKey) return provider.apiKey;
-    throw new Error(`供应商「${provider.name}」未填写 API Key，请到设置中补充`);
+    const key = store.getProviderKey(provider.id); // 密文落盘，仅此处解密
+    if (key) return key;
+    throw new Error(`供应商「${provider.name}」未填写 API Key（或解密失败），请到设置中重新填写`);
   }
   const key = process.env.ANTHROPIC_API_KEY || process.env.DEEPSEEK_API_KEY;
   if (!key) {
