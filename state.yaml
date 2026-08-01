@@ -12,7 +12,7 @@ environment:
 tranches:
   T0:
     title: 脚手架
-    status: done_pending_judge
+    status: done
     tasks:
       - id: T0.1
         kind: worker
@@ -35,7 +35,7 @@ tranches:
       骨架与 §3 一致、依赖未越界。教训写入 Worker 约定：验证必须覆盖 bin 真实执行语义。
   T1:
     title: 工具层 F5-F10 + registry
-    status: active
+    status: done
     tasks:
       - id: T1.1
         kind: worker
@@ -62,7 +62,7 @@ tranches:
       Ctrl+C SIGTERM 进程组；当前超时 SIGKILL 可接受。
   T2:
     title: 引擎 F1-F3 + api/client + types
-    status: active
+    status: done
     tasks:
       - id: T2.1
         kind: worker
@@ -103,7 +103,7 @@ tranches:
       "字面遵循 GOAL 但产出非法 history" 的取舍必须升级 Judge，不得备忘自行落地。
   T3:
     title: 交互 F17/F18/F11/F11b
-    status: active
+    status: done
     tasks:
       - id: T3.1
         kind: worker
@@ -143,16 +143,52 @@ tranches:
       非阻塞备忘：closing 时参数校验错误被改写为 STDIN_CLOSED 消息（失真），T4/T5 顺手改。
   T4:
     title: 上下文 F4 compact + F12 AGENTS.md
-    status: active
+    status: done
     tasks:
       - id: T4.1
         kind: worker
         title: F4 compact（自动+手动共用入口、摘要保留决策、N=10、失败保留原历史、配对安全切点）+ F12 AGENTS.md/CLAUDE.md 注入
         allowed_files: [src/agent/compact.ts, src/agent/prompts.ts, src/session/history.ts, src/index.ts, src/ui/**, test/unit/**]
         verify: [npm run build, npx tsc --noEmit, npm test]
+        status: done
+        receipt: |
+          result: done. commit 1fff3a1。99/99 绿（+13）。maybeCompact/forceCompact 共用 doCompact；
+          切点向旧侧扩窗保配对；失败保留原历史+warning；REPL 接 /compact //help；
+          自动触发在 index 层不碰 loop（铁律）；loadProjectInstructions AGENTS.md→CLAUDE.md→空。
+          T3 Judge 备忘（closing 改写校验错误）已修复附回归测。
+      - id: T4.2
+        kind: pm
+        title: T4 出口冒烟（XHARNESS_CONTEXT_WINDOW=800 逼出自动压缩）
+        status: done
+        receipt: |
+          真实端点 5 回合管道驱动：自动压缩触发"810→461"，压缩后模型仍答出
+          早期决策（项目代号 Papaya）；AGENTS.md 注入生效（[AGENTS-OK] 首行输出）；
+          /compact 短历史时友好返回。
+          已知边界（记录）：消息数≤10 但单条工具输出巨大时无法压缩（切点算法下限），
+          真实 1M 窗口下风险极低，提请 Judge 裁决是否接受。
+    judge: |
+      approve。现场复验 99/99 绿；F4/F12 逐条合规；切点构造性推演无拆对
+      （摘要 user 消息恒为首条，keep 首条为 assistant tool_use 合法）；
+      Judge 亲自用窗口 400 复跑冒烟：两次压缩后决策 Papaya 仍答对、AGENTS-OK 生效。
+      裁决 B1（≤10 条+巨大输出永不压缩）：接受为 MVP 已知限制，不修（动态 N 救不了
+      单条逼近窗口场景，真修法是 tool_result 就地截断属新功能）；README 必须写明。
+      裁决 B2（旧段过小时压缩不降反升 461→470，摘要再摘要）：接受，仅记录。
+      非阻塞：多步扩窗无专项单测，T5 顺手补或留最终审。
+  T5:
+    title: 技能 F13-F16 + Skill 元工具
+    status: active
+    tasks:
+      - id: T5.1
+        kind: worker
+        title: F13 loader + F14 用户触发 + F15 Skill 元工具与 skillSummaries 注入 + F16 内置命令优先级与 /help 完整化
+        allowed_files: [src/skills/**, src/tools/skill.ts, src/index.ts, src/ui/**, test/unit/**]
+        verify: [npm run build, npx tsc --noEmit, npm test]
         status: active
         receipt: null
     judge: pending
-  T5:
-    title: 技能 F13-F16 + Skill 元工具
-    status: pending
+
+known_limitations:
+  - B1: 消息数≤10 且单条工具输出巨大时 compact 无法压缩，理论可致上下文溢出；
+    真实 1M 窗口+Bash 30K 截断下仅 Read 病态大文件可触达。README §8 必须覆盖。
+  - B2: 极小窗口下旧段小于摘要时压缩不降反升，且摘要会被反复再摘要；
+    每回合仅触发一次无死循环，真实窗口无实际影响。
