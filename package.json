@@ -1,0 +1,26 @@
+{
+  "name": "xharness",
+  "version": "0.1.0",
+  "description": "TypeScript coding agent harness (Claude Code style MVP)",
+  "type": "module",
+  "bin": {
+    "xharness": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run --project unit",
+    "test:e2e": "vitest run --project e2e"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.57.0",
+    "gray-matter": "^4.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.0"
+  }
+}
