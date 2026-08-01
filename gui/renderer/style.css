@@ -372,3 +372,10 @@ body {
 
 /* 模型菜单分组 */
 .mm-group { font-size: 12px; color: var(--text-3); padding: 7px 10px 3px; }
+
+/* 设置打开时，禁用下层界面的窗口拖拽区，否则会拦截设置面板的点击（Electron 拖拽区不受 z-index 遮挡影响） */
+body.settings-open #empty-state,
+body.settings-open #chat-header,
+body.settings-open .sb-titlebar {
+  -webkit-app-region: no-drag;
+}

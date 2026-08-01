@@ -717,12 +717,14 @@ function bindSettings() {
 function openSettings() {
   S.settings.activeProviderId = S.providers[0]?.id ?? null;
   S.settings.draft = null;
+  document.body.classList.add("settings-open");
   $("settings-view").classList.remove("hidden");
   renderProviderList();
   renderProviderDetail();
 }
 
 function closeSettings() {
+  document.body.classList.remove("settings-open");
   $("settings-view").classList.add("hidden");
   // 供应商可能变化，校正当前选择
   const stillValid = S.providers.some(
