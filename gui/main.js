@@ -41,7 +41,7 @@ function createWindow() {
 app.whenReady().then(() => {
   store.load();
   try {
-    engine.initConfig();
+    engine.initEngine();
   } catch (err) {
     dialog.showErrorBox("xharness 启动失败", err.message);
     app.quit();
@@ -57,9 +57,28 @@ app.on("window-all-closed", () => app.quit());
 ipcMain.handle("state:get", () => ({
   username: userInfo().username,
   sidebar: store.sidebarData(),
-  models: engine.MODELS,
+  providers: store.getProviders(),
   efforts: engine.EFFORTS,
+  envKeyPresent: !!(process.env.ANTHROPIC_API_KEY || process.env.DEEPSEEK_API_KEY),
 }));
+
+ipcMain.handle("settings:get", () => ({
+  providers: store.getProviders(),
+  envKeyPresent: !!(process.env.ANTHROPIC_API_KEY || process.env.DEEPSEEK_API_KEY),
+}));
+
+ipcMain.handle("settings:upsert", (_e, provider) => {
+  if (!provider?.id || !provider?.name || !provider?.baseUrl) {
+    return { ok: false, error: "名称与 Base URL 必填" };
+  }
+  store.upsertProvider(provider);
+  return { ok: true, providers: store.getProviders() };
+});
+
+ipcMain.handle("settings:delete", (_e, id) => {
+  store.deleteProvider(id);
+  return { providers: store.getProviders() };
+});
 
 ipcMain.handle("project:add", async () => {
   const r = await dialog.showOpenDialog(win, {
@@ -97,9 +116,9 @@ ipcMain.handle("conv:delete", (_e, id) => {
   return store.sidebarData();
 });
 
-ipcMain.handle("conv:setModel", (_e, { id, projectDir, model }) => {
+ipcMain.handle("conv:setModelChoice", (_e, { id, projectDir, providerId, model }) => {
   engine.getSession(id, projectDir, store.getConversation(id)?.blocks);
-  engine.setModel(id, model);
+  engine.setModelChoice(id, providerId, model);
   return engine.sessionMeta(id);
 });
 

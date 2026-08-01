@@ -7,8 +7,11 @@ contextBridge.exposeInMainWorld("api", {
   openConversation: (id) => ipcRenderer.invoke("conv:open", id),
   pinConversation: (id, pinned) => ipcRenderer.invoke("conv:pin", { id, pinned }),
   deleteConversation: (id) => ipcRenderer.invoke("conv:delete", id),
-  setModel: (id, projectDir, model) =>
-    ipcRenderer.invoke("conv:setModel", { id, projectDir, model }),
+  setModelChoice: (id, projectDir, providerId, model) =>
+    ipcRenderer.invoke("conv:setModelChoice", { id, projectDir, providerId, model }),
+  getSettings: () => ipcRenderer.invoke("settings:get"),
+  upsertProvider: (provider) => ipcRenderer.invoke("settings:upsert", provider),
+  deleteProvider: (id) => ipcRenderer.invoke("settings:delete", id),
   setEffort: (id, projectDir, effort) =>
     ipcRenderer.invoke("conv:setEffort", { id, projectDir, effort }),
   listSkills: (projectDir) => ipcRenderer.invoke("skills:list", projectDir),

@@ -2,7 +2,7 @@
 // 每个会话持有独立的 History/Registry/Config（模型与推理强度可覆盖）。
 import { spawnSync } from "node:child_process";
 import { basename } from "node:path";
-import { loadConfig } from "../dist/config.js";
+import * as store from "./store.js";
 import { createApiClient } from "../dist/api/client.js";
 import { createDefaultRegistry } from "../dist/tools/registry.js";
 import {
@@ -18,17 +18,15 @@ import { createSkillTool } from "../dist/tools/skill.js";
 import { createTodoWriteTool } from "../dist/tools/todoWrite.js";
 import { dispatchSlash } from "../dist/ui/slashCommands.js";
 
-let baseConfig = null;
-
-export function initConfig() {
-  if (!process.env.ANTHROPIC_API_KEY && process.env.DEEPSEEK_API_KEY) {
-    process.env.ANTHROPIC_API_KEY = process.env.DEEPSEEK_API_KEY;
+export function initEngine() {
+  const r = spawnSync("rg", ["--version"], { stdio: "ignore" });
+  if (r.error || r.status !== 0) {
+    throw new Error(
+      "xharness 依赖 ripgrep (rg)，但未在 PATH 中找到。请先安装：brew install ripgrep"
+    );
   }
-  baseConfig = loadConfig();
-  return baseConfig;
 }
 
-export const MODELS = ["deepseek-v4-pro", "deepseek-v4-flash"];
 export const EFFORTS = [
   { value: "", label: "默认(高)" },
   { value: "none", label: "关闭" },
@@ -37,8 +35,30 @@ export const EFFORTS = [
   { value: "max", label: "极高" },
 ];
 
-function contextWindowFor(model) {
-  return model.startsWith("deepseek-v4-") ? 1_000_000 : 200_000;
+function enabledProviders() {
+  return store.getProviders().filter((p) => p.enabled && p.models?.length);
+}
+
+export function defaultChoice() {
+  const p = enabledProviders()[0];
+  return p
+    ? { providerId: p.id, model: p.models[0].id }
+    : { providerId: null, model: null };
+}
+
+function resolveKey(provider) {
+  if (provider.keyMode === "manual") {
+    if (provider.apiKey) return provider.apiKey;
+    throw new Error(`供应商「${provider.name}」未填写 API Key，请到设置中补充`);
+  }
+  const key = process.env.ANTHROPIC_API_KEY || process.env.DEEPSEEK_API_KEY;
+  if (!key) {
+    throw new Error(
+      `供应商「${provider.name}」使用环境变量模式，但 ANTHROPIC_API_KEY / DEEPSEEK_API_KEY 均未设置；` +
+        "请设置环境变量后重启，或在设置中改为手动填写 API Key"
+    );
+  }
+  return key;
 }
 
 const sessions = new Map();
@@ -63,12 +83,14 @@ export function getSession(convId, projectDir, savedBlocks) {
   const skills = loadSkills({ cwd: projectDir });
   const registry = createDefaultRegistry();
   const todoStore = { todos: [] };
+  const choice = defaultChoice();
 
   s = {
     convId,
     projectDir,
-    model: baseConfig.model,
-    effort: baseConfig.effort,
+    providerId: choice.providerId,
+    model: choice.model,
+    effort: undefined,
     history: new History(),
     registry,
     skills,
@@ -151,11 +173,16 @@ function createAskTool(s) {
 }
 
 function config(s) {
+  const provider = store.getProviders().find((p) => p.id === s.providerId);
+  if (!provider) throw new Error("未找到可用的模型供应商，请到设置中配置");
+  const model = provider.models.find((m) => m.id === s.model) ?? provider.models[0];
+  if (!model) throw new Error(`供应商「${provider.name}」未配置任何模型`);
   return {
-    ...baseConfig,
-    model: s.model,
+    apiKey: resolveKey(provider),
+    baseUrl: provider.baseUrl,
+    model: model.id,
+    contextWindow: model.contextWindow || 200_000,
     effort: s.effort || undefined,
-    contextWindow: contextWindowFor(s.model),
   };
 }
 
@@ -177,9 +204,12 @@ export function stop(convId) {
   if (s?.abort) s.abort.abort();
 }
 
-export function setModel(convId, model) {
+export function setModelChoice(convId, providerId, model) {
   const s = sessions.get(convId);
-  if (s) s.model = model;
+  if (s) {
+    s.providerId = providerId;
+    s.model = model;
+  }
 }
 
 export function setEffort(convId, effort) {
@@ -189,9 +219,9 @@ export function setEffort(convId, effort) {
 
 export function sessionMeta(convId) {
   const s = sessions.get(convId);
-  return s
-    ? { model: s.model, effort: s.effort ?? "" }
-    : { model: baseConfig?.model, effort: baseConfig?.effort ?? "" };
+  if (s) return { providerId: s.providerId, model: s.model, effort: s.effort ?? "" };
+  const d = defaultChoice();
+  return { providerId: d.providerId, model: d.model, effort: "" };
 }
 
 export function listSkills(projectDir) {
@@ -243,25 +273,31 @@ export async function send(convId, projectDir, text, savedBlocks, emit) {
   if (text.startsWith("/")) {
     const d = dispatchSlash(text, s.skills);
     if (d.kind === "builtin") {
-      if (d.command === "compact") {
-        const r = await forceCompact({
-          history: s.history,
-          client: createApiClient(config(s)),
-          config: config(s),
-        });
-        emit({
-          type: "notice",
-          text: r.compacted
-            ? `已压缩：估算 token ${r.beforeTokens} → ${r.afterTokens}`
-            : (r.warning ?? "会话历史太短，无需压缩"),
-        });
-      } else if (d.command === "clear") {
-        s.history = new History();
-        s.todoStore.todos = [];
-        emit({ type: "cleared" });
-      } else {
-        emit({ type: "notice", text: `GUI 暂不支持 /${d.command}` });
+      try {
+        if (d.command === "compact") {
+          const cfg = config(s);
+          const r = await forceCompact({
+            history: s.history,
+            client: createApiClient(cfg),
+            config: cfg,
+          });
+          emit({
+            type: "notice",
+            text: r.compacted
+              ? `已压缩：估算 token ${r.beforeTokens} → ${r.afterTokens}`
+              : (r.warning ?? "会话历史太短，无需压缩"),
+          });
+        } else if (d.command === "clear") {
+          s.history = new History();
+          s.todoStore.todos = [];
+          emit({ type: "cleared" });
+        } else {
+          emit({ type: "notice", text: `GUI 暂不支持 /${d.command}` });
+        }
+      } catch (err) {
+        emit({ type: "error", message: err instanceof Error ? err.message : String(err) });
       }
+      emit({ type: "turn_end", reason: "end_turn" });
       return;
     }
     if (d.kind === "skill") {
@@ -273,8 +309,17 @@ export async function send(convId, projectDir, text, savedBlocks, emit) {
 
   s.running = true;
   s.abort = new AbortController();
-  const cfg = config(s);
-  const client = createApiClient(cfg);
+  let cfg, client;
+  try {
+    cfg = config(s);
+    client = createApiClient(cfg);
+  } catch (err) {
+    s.running = false;
+    s.abort = null;
+    emit({ type: "error", message: err instanceof Error ? err.message : String(err) });
+    emit({ type: "turn_end", reason: "end_turn" });
+    return;
+  }
 
   try {
     const r = await maybeCompact({ history: s.history, client, config: cfg });

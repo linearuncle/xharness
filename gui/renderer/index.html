@@ -10,18 +10,10 @@
     <!-- 左侧栏 -->
     <aside id="sidebar">
       <div class="sb-titlebar">
-        <div class="sb-appname">xharness <span class="chev">▾</span></div>
-        <div class="sb-titleicons">
-          <span class="icon-btn" title="搜索">⌕</span>
-          <span class="icon-btn" title="通知">🔔</span>
-        </div>
+        <div class="sb-appname">xharness</div>
       </div>
       <nav class="sb-nav">
         <div class="sb-item primary" id="btn-new-conv"><span class="ic">✎</span>新对话</div>
-        <div class="sb-item disabled"><span class="ic">⇅</span>拉取请求</div>
-        <div class="sb-item disabled"><span class="ic">▦</span>站点</div>
-        <div class="sb-item disabled"><span class="ic">◷</span>已安排</div>
-        <div class="sb-item disabled"><span class="ic">@</span>插件</div>
       </nav>
       <div class="sb-scroll">
         <div id="sb-pinned-section" class="hidden">
@@ -31,7 +23,6 @@
         <div class="sb-section sb-projects-header">
           <span>项目</span>
           <span class="sb-section-actions">
-            <span class="icon-btn" title="更多">…</span>
             <span class="icon-btn" id="btn-add-project" title="添加项目">＋</span>
           </span>
         </div>
@@ -40,7 +31,7 @@
       <div class="sb-footer">
         <span class="avatar" id="avatar">x</span>
         <span id="username">…</span>
-        <span class="icon-btn help" title="帮助">?</span>
+        <span class="icon-btn settings-gear" id="btn-settings" title="设置">⚙</span>
       </div>
     </aside>
 
@@ -49,7 +40,6 @@
       <div id="chat-header" class="hidden">
         <span class="ch-folder">▤</span>
         <span id="chat-title"></span>
-        <span class="icon-btn" title="更多">…</span>
         <span class="spacer"></span>
         <span class="icon-btn" id="btn-env" title="环境信息">☰</span>
       </div>
@@ -100,11 +90,9 @@
           <div id="popup" class="hidden"></div>
           <textarea id="input" rows="1" placeholder="随心输入"></textarea>
           <div id="composer-bar">
-            <span class="icon-btn disabled" title="附件">＋</span>
             <span id="yolo-badge" title="YOLO 模式：所有工具直接执行，无确认、无沙箱">⚠ 完全访问</span>
             <span class="spacer"></span>
             <span id="model-label" title="模型与推理强度">… <span class="chev">▾</span></span>
-            <span class="icon-btn disabled" title="语音">🎙</span>
             <button id="btn-send" title="发送">↑</button>
           </div>
           <div id="model-menu" class="hidden"></div>
@@ -117,12 +105,50 @@
         <div class="env-row" id="env-changes">🗇 变更</div>
         <div class="env-row">🖥 本地</div>
         <div class="env-row" id="env-branch">⎇ —</div>
-        <div class="env-row disabled">◎ 提交或推送</div>
-        <div class="env-row disabled dim">🐙 未配置拉取请求</div>
         <div id="env-changes-list"></div>
       </aside>
     </main>
   </div>
+
+  <!-- 设置界面（整窗覆盖） -->
+  <div id="settings-view" class="hidden">
+    <aside id="set-sidebar">
+      <div class="set-titlebar"></div>
+      <div class="sb-item primary" id="btn-settings-back"><span class="ic">←</span>返回工作区</div>
+      <div class="sb-section">基础设置</div>
+      <div class="sb-item active"><span class="ic">▤</span>模型设置</div>
+    </aside>
+    <main id="set-main">
+      <h1>模型设置</h1>
+      <p class="set-desc">管理模型供应商，配置后可在聊天时选择使用。API 格式固定为 Anthropic Messages。</p>
+      <div id="set-card">
+        <div id="prov-list">
+          <div class="sb-section">默认</div>
+          <div id="prov-builtin"></div>
+          <div class="sb-section">自定义供应商</div>
+          <div id="prov-custom"></div>
+          <div class="prov-row add" id="btn-add-provider">＋ 添加供应商</div>
+        </div>
+        <div id="prov-detail"><!-- 动态渲染 --></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- 添加模型弹窗 -->
+  <div id="modal-backdrop" class="hidden">
+    <div id="model-dialog">
+      <div class="md-title">添加模型 <span class="icon-btn" id="md-close">✕</span></div>
+      <label>模型 ID</label>
+      <input id="md-model-id" placeholder="如 deepseek-v4-flash" />
+      <label>上下文窗口</label>
+      <input id="md-context" type="number" value="200000" />
+      <div class="md-actions">
+        <button class="btn" id="md-cancel">取消</button>
+        <button class="btn primary" id="md-save">保存</button>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>

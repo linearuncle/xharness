@@ -2,7 +2,8 @@
 const $ = (id) => document.getElementById(id);
 
 const S = {
-  models: [],
+  providers: [],
+  envKeyPresent: false,
   efforts: [],
   sidebar: { pinned: [], projects: [] },
   activeProject: null, // dir
@@ -10,12 +11,17 @@ const S = {
   running: false,
   askPending: false,
   turn: null, // 当前流式回合的渲染状态
-  meta: { model: "", effort: "" },
+  meta: { providerId: null, model: "", effort: "" },
+  settings: { activeProviderId: null, draft: null }, // 设置界面状态
 };
 
 const EFFORT_LABEL = { "": "默认", none: "关闭", low: "低", high: "高", max: "极高" };
-const modelShort = (m) =>
-  m === "deepseek-v4-pro" ? "V4 Pro" : m === "deepseek-v4-flash" ? "V4 Flash" : m;
+const modelShort = (m) => (m ? m.replace(/^deepseek-/, "") : "未配置");
+
+function defaultChoice() {
+  const p = S.providers.find((x) => x.enabled && x.models?.length);
+  return p ? { providerId: p.id, model: p.models[0].id } : { providerId: null, model: "" };
+}
 
 /* ---------------- 侧栏 ---------------- */
 
@@ -185,7 +191,7 @@ async function sendCurrent() {
   if (!S.activeConv) await newConversation();
   if (!S.activeConv) return;
   // 把空态时选好的模型/推理强度应用到实际会话
-  await api.setModel(S.activeConv, S.activeProject, S.meta.model);
+  await api.setModelChoice(S.activeConv, S.activeProject, S.meta.providerId, S.meta.model);
   await api.setEffort(S.activeConv, S.activeProject, S.meta.effort ?? "");
   input.value = "";
   autosize();
@@ -375,12 +381,10 @@ function finishTurn(reason, skipPersist = false) {
   for (const seg of t.textSegs) {
     api.renderMarkdown(seg.text).then((h) => (seg.el.innerHTML = h));
   }
-  // 操作行
+  // 操作行（只保留可用的复制）
   const last = t.textSegs[t.textSegs.length - 1];
   if (last) {
-    const row = el(
-      `<div class="action-row"><span title="复制">⧉</span><span title="赞">👍</span><span title="踩">👎</span><span title="分享">↗</span></div>`
-    );
+    const row = el(`<div class="action-row"><span title="复制">⧉</span></div>`);
     row.children[0].onclick = () => navigator.clipboard.writeText(last.text);
     t.container.appendChild(row);
   }
@@ -543,20 +547,45 @@ function renderModelMenuRoot() {
     r.onclick = fn;
     m.appendChild(r);
   };
-  row("模型", modelShort(S.meta.model), () =>
-    renderModelMenuOptions("模型", S.models.map((x) => ({ label: modelShort(x), value: x, cur: x === S.meta.model })), async (v) => {
-      S.meta = await api.setModel(S.activeConv ?? "-", S.activeProject, v);
-      updateModelLabel();
-    })
-  );
+  row("模型", modelShort(S.meta.model), renderModelOptions);
   row("推理强度", EFFORT_LABEL[S.meta.effort ?? ""] ?? "默认", () =>
     renderModelMenuOptions("推理强度", S.efforts.map((x) => ({ label: x.label, value: x.value, cur: (S.meta.effort ?? "") === x.value })), async (v) => {
-      S.meta = await api.setEffort(S.activeConv ?? "-", S.activeProject, v);
+      if (S.activeConv) S.meta = await api.setEffort(S.activeConv, S.activeProject, v);
+      else S.meta.effort = v;
       updateModelLabel();
     })
   );
-  const speed = el(`<div class="mm-row">速度<span class="mm-val">标准</span></div>`);
-  m.appendChild(speed);
+}
+
+// 模型选项：按供应商分组
+function renderModelOptions() {
+  const m = $("model-menu");
+  m.innerHTML = `<div class="mm-row" id="mm-back">‹ 模型</div><div class="mm-sub"></div>`;
+  $("mm-back").onclick = renderModelMenuRoot;
+  const sub = m.querySelector(".mm-sub");
+  const enabled = S.providers.filter((p) => p.enabled && p.models?.length);
+  if (!enabled.length) {
+    sub.appendChild(el(`<div class="mm-group">暂无可用供应商，请到设置中配置</div>`));
+    return;
+  }
+  for (const p of enabled) {
+    sub.appendChild(el(`<div class="mm-group">${esc(p.name)}</div>`));
+    for (const mod of p.models) {
+      const cur = p.id === S.meta.providerId && mod.id === S.meta.model;
+      const r = el(`<div class="mm-opt">${esc(mod.id)}<span class="check">${cur ? "✓" : ""}</span></div>`);
+      r.onclick = async () => {
+        if (S.activeConv) {
+          S.meta = await api.setModelChoice(S.activeConv, S.activeProject, p.id, mod.id);
+        } else {
+          S.meta.providerId = p.id;
+          S.meta.model = mod.id;
+        }
+        updateModelLabel();
+        toggleModelMenu(false);
+      };
+      sub.appendChild(r);
+    }
+  }
 }
 
 function renderModelMenuOptions(title, options, pick) {
@@ -596,14 +625,16 @@ function scrollBottom(force) {
 
 async function boot() {
   const st = await api.getState();
-  S.models = st.models;
+  S.providers = st.providers;
+  S.envKeyPresent = st.envKeyPresent;
   S.efforts = st.efforts;
   S.sidebar = st.sidebar;
-  S.meta = { model: st.models[0], effort: "" };
+  S.meta = { ...defaultChoice(), effort: "" };
   $("username").textContent = st.username;
   $("avatar").textContent = st.username.slice(0, 1);
   updateModelLabel();
   renderSidebar();
+  bindSettings();
   const first = S.sidebar.projects[0];
   if (first) await selectProject(first.dir);
 
@@ -663,3 +694,219 @@ async function boot() {
 }
 
 boot();
+
+/* ---------------- 设置界面 ---------------- */
+
+function bindSettings() {
+  $("btn-settings").onclick = openSettings;
+  $("btn-settings-back").onclick = closeSettings;
+  $("btn-add-provider").onclick = () => {
+    const id = `p${Date.now().toString(36)}`;
+    S.settings.draft = {
+      id, name: "", baseUrl: "", apiFormat: "anthropic",
+      keyMode: "manual", apiKey: "", enabled: true, builtin: false, models: [],
+    };
+    S.settings.activeProviderId = id;
+    renderProviderList();
+    renderProviderDetail();
+  };
+  $("md-close").onclick = closeModelDialog;
+  $("md-cancel").onclick = closeModelDialog;
+}
+
+function openSettings() {
+  S.settings.activeProviderId = S.providers[0]?.id ?? null;
+  S.settings.draft = null;
+  $("settings-view").classList.remove("hidden");
+  renderProviderList();
+  renderProviderDetail();
+}
+
+function closeSettings() {
+  $("settings-view").classList.add("hidden");
+  // 供应商可能变化，校正当前选择
+  const stillValid = S.providers.some(
+    (p) => p.id === S.meta.providerId && p.enabled && p.models?.some((m) => m.id === S.meta.model)
+  );
+  if (!stillValid) S.meta = { ...defaultChoice(), effort: S.meta.effort };
+  updateModelLabel();
+}
+
+function currentProvider() {
+  if (S.settings.draft && S.settings.draft.id === S.settings.activeProviderId)
+    return S.settings.draft;
+  return S.providers.find((p) => p.id === S.settings.activeProviderId) ?? null;
+}
+
+function renderProviderList() {
+  const builtinEl = $("prov-builtin");
+  const customEl = $("prov-custom");
+  builtinEl.innerHTML = "";
+  customEl.innerHTML = "";
+  const rows = [...S.providers];
+  if (S.settings.draft && !rows.some((p) => p.id === S.settings.draft.id))
+    rows.push(S.settings.draft);
+  for (const p of rows) {
+    const r = el(
+      `<div class="prov-row${p.id === S.settings.activeProviderId ? " active" : ""}">🗄 <span>${esc(p.name || "未命名")}</span><span class="dot${p.enabled ? " on" : ""}"></span></div>`
+    );
+    r.onclick = () => {
+      if (S.settings.draft && p.id !== S.settings.draft.id) S.settings.draft = null;
+      S.settings.activeProviderId = p.id;
+      renderProviderList();
+      renderProviderDetail();
+    };
+    (p.builtin ? builtinEl : customEl).appendChild(r);
+  }
+}
+
+function renderProviderDetail() {
+  const box = $("prov-detail");
+  const p = currentProvider();
+  if (!p) { box.innerHTML = `<div class="notice">选择或添加一个供应商</div>`; return; }
+  const isDraft = S.settings.draft?.id === p.id;
+  const work = isDraft ? p : structuredClone(p); // 已存在的编辑基于副本，保存时落盘
+
+  box.innerHTML = "";
+  const header = el(`<div class="pd-header">
+      <span class="pd-name">${esc(work.name || "新供应商")}</span>
+      <span class="pd-badge${work.enabled ? " on" : ""}" id="pd-toggle">${work.enabled ? "已启用" : "已禁用"}</span>
+      ${work.builtin ? "" : `<span class="icon-btn pd-del" id="pd-del" title="删除">🗑</span>`}
+    </div>`);
+  box.appendChild(header);
+  header.querySelector("#pd-toggle").onclick = () => {
+    work.enabled = !work.enabled;
+    header.querySelector("#pd-toggle").className = `pd-badge${work.enabled ? " on" : ""}`;
+    header.querySelector("#pd-toggle").textContent = work.enabled ? "已启用" : "已禁用";
+  };
+  const delBtn = header.querySelector("#pd-del");
+  if (delBtn) delBtn.onclick = async () => {
+    if (isDraft) { S.settings.draft = null; }
+    else {
+      const r = await api.deleteProvider(work.id);
+      S.providers = r.providers;
+    }
+    S.settings.activeProviderId = S.providers[0]?.id ?? null;
+    renderProviderList();
+    renderProviderDetail();
+  };
+
+  const field = (labelText, inputHtml) => {
+    box.appendChild(el(`<label>${labelText}</label>`));
+    const w = el(`<div>${inputHtml}</div>`);
+    box.appendChild(w);
+    return w.firstChild;
+  };
+
+  const nameInput = field("名称", `<input type="text" placeholder="如：DeepSeek" value="${esc(work.name)}" ${work.builtin ? "disabled" : ""} />`);
+  nameInput.oninput = () => (work.name = nameInput.value.trim());
+
+  const urlInput = field("Base URL", `<input type="text" placeholder="https://api.example.com/anthropic" value="${esc(work.baseUrl)}" />`);
+  urlInput.oninput = () => (work.baseUrl = urlInput.value.trim());
+
+  field("API 格式", `<select disabled><option>Anthropic Messages (/v1/messages)</option></select>`);
+
+  // API Key：环境变量 / 手动
+  box.appendChild(el(`<label>API Key</label>`));
+  const seg = el(`<div class="seg">
+      <span class="${work.keyMode === "env" ? "on" : ""}" data-m="env">环境变量</span>
+      <span class="${work.keyMode === "manual" ? "on" : ""}" data-m="manual">手动填写</span>
+    </div>`);
+  box.appendChild(seg);
+  const keyArea = el(`<div></div>`);
+  box.appendChild(keyArea);
+  const renderKeyArea = () => {
+    if (work.keyMode === "env") {
+      keyArea.innerHTML = `<div class="env-hint${S.envKeyPresent ? " ok" : ""}">
+        使用环境变量 ANTHROPIC_API_KEY / DEEPSEEK_API_KEY —— 当前${S.envKeyPresent ? "已检测到 ✓" : "未检测到，启动应用前请先设置"}</div>`;
+    } else {
+      keyArea.innerHTML = "";
+      const row = el(`<div class="key-row">
+          <input type="password" placeholder="输入 API Key" value="${esc(work.apiKey ?? "")}" />
+          <span class="icon-btn" title="显示/隐藏">👁</span>
+        </div>`);
+      const inp = row.querySelector("input");
+      inp.oninput = () => (work.apiKey = inp.value.trim());
+      row.querySelector(".icon-btn").onclick = () => {
+        inp.type = inp.type === "password" ? "text" : "password";
+      };
+      keyArea.appendChild(row);
+    }
+  };
+  seg.querySelectorAll("span").forEach((sp) => {
+    sp.onclick = () => {
+      work.keyMode = sp.dataset.m;
+      seg.querySelectorAll("span").forEach((x) => x.classList.toggle("on", x === sp));
+      renderKeyArea();
+    };
+  });
+  renderKeyArea();
+
+  // 模型列表
+  box.appendChild(el(`<label>模型列表</label>`));
+  const modelList = el(`<div></div>`);
+  box.appendChild(modelList);
+  const renderModels = () => {
+    modelList.innerHTML = "";
+    for (const mod of work.models) {
+      const r = el(`<div class="model-row">
+          <span>${esc(mod.id)}</span>
+          <span class="ctx-badge">${mod.contextWindow >= 1_000_000 ? (mod.contextWindow / 1_000_000) + "M" : Math.round(mod.contextWindow / 1000) + "K"}</span>
+          <span class="icon-btn" title="删除">🗑</span>
+        </div>`);
+      r.querySelector(".icon-btn").onclick = () => {
+        work.models = work.models.filter((x) => x !== mod);
+        renderModels();
+      };
+      modelList.appendChild(r);
+    }
+  };
+  renderModels();
+  const addModelBtn = el(`<button class="btn">＋ 添加模型</button>`);
+  box.appendChild(addModelBtn);
+  addModelBtn.onclick = () => openModelDialog((id, ctx) => {
+    if (work.models.some((x) => x.id === id)) return;
+    work.models.push({ id, contextWindow: ctx });
+    renderModels();
+  });
+
+  // 保存
+  const saveRow = el(`<div class="pd-save-row"><button class="btn primary">保存</button><span class="env-hint" id="pd-msg"></span></div>`);
+  box.appendChild(saveRow);
+  saveRow.querySelector("button").onclick = async () => {
+    if (!work.name || !work.baseUrl) {
+      saveRow.querySelector("#pd-msg").textContent = "名称与 Base URL 必填";
+      return;
+    }
+    const r = await api.upsertProvider(work);
+    if (!r.ok) { saveRow.querySelector("#pd-msg").textContent = r.error; return; }
+    S.providers = r.providers;
+    S.settings.draft = null;
+    S.settings.activeProviderId = work.id;
+    renderProviderList();
+    renderProviderDetail();
+    const msg = box.querySelector("#pd-msg");
+    if (msg) msg.textContent = "已保存 ✓";
+  };
+}
+
+/* 添加模型弹窗 */
+let modelDialogSave = null;
+function openModelDialog(onSave) {
+  modelDialogSave = onSave;
+  $("md-model-id").value = "";
+  $("md-context").value = "200000";
+  $("modal-backdrop").classList.remove("hidden");
+  $("md-model-id").focus();
+  $("md-save").onclick = () => {
+    const id = $("md-model-id").value.trim();
+    const ctx = parseInt($("md-context").value, 10);
+    if (!id || !Number.isFinite(ctx) || ctx <= 0) return;
+    modelDialogSave?.(id, ctx);
+    closeModelDialog();
+  };
+}
+function closeModelDialog() {
+  $("modal-backdrop").classList.add("hidden");
+  modelDialogSave = null;
+}

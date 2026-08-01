@@ -13,10 +13,27 @@ import { join, basename } from "node:path";
 const DIR = join(homedir(), ".xharness", "gui");
 const SESS_DIR = join(DIR, "sessions");
 const PROJECTS_FILE = join(DIR, "projects.jsonl");
+const SETTINGS_FILE = join(DIR, "settings.jsonl");
 const LEGACY_FILE = join(DIR, "state.json");
 
 let projects = []; // [{dir}]
 let conversations = {}; // id -> {projectDir,title,pinned,createdAt,blocks}
+let providers = []; // 模型供应商（settings.jsonl 重放）
+
+const DEFAULT_PROVIDER = {
+  id: "deepseek",
+  name: "DeepSeek",
+  baseUrl: "https://api.deepseek.com/anthropic",
+  apiFormat: "anthropic",
+  keyMode: "env", // env: 用 ANTHROPIC_API_KEY / DEEPSEEK_API_KEY；manual: 手填
+  apiKey: "",
+  enabled: true,
+  builtin: true,
+  models: [
+    { id: "deepseek-v4-pro", contextWindow: 1_000_000 },
+    { id: "deepseek-v4-flash", contextWindow: 1_000_000 },
+  ],
+};
 
 const line = (obj) => JSON.stringify(obj) + "\n";
 
@@ -114,7 +131,42 @@ export function load() {
     const c = replaySession(id);
     if (c) conversations[id] = c;
   }
+
+  // settings.jsonl 重放：{op:"upsert",provider} / {op:"delete",id}
+  providers = [];
+  for (const r of readLines(SETTINGS_FILE)) {
+    if (r.op === "upsert" && r.provider?.id) {
+      const i = providers.findIndex((p) => p.id === r.provider.id);
+      if (i >= 0) providers[i] = r.provider;
+      else providers.push(r.provider);
+    } else if (r.op === "delete") {
+      providers = providers.filter((p) => p.id !== r.id);
+    }
+  }
+  if (!providers.some((p) => p.id === "deepseek")) {
+    providers.unshift({ ...DEFAULT_PROVIDER });
+    appendLine(SETTINGS_FILE, { op: "upsert", provider: DEFAULT_PROVIDER, ts: Date.now() });
+  }
+
   return { projects, conversations };
+}
+
+export function getProviders() {
+  return providers;
+}
+
+export function upsertProvider(p) {
+  const i = providers.findIndex((x) => x.id === p.id);
+  if (i >= 0) providers[i] = p;
+  else providers.push(p);
+  appendLine(SETTINGS_FILE, { op: "upsert", provider: p, ts: Date.now() });
+}
+
+export function deleteProvider(id) {
+  const p = providers.find((x) => x.id === id);
+  if (!p || p.builtin) return; // 内置供应商不可删
+  providers = providers.filter((x) => x.id !== id);
+  appendLine(SETTINGS_FILE, { op: "delete", id, ts: Date.now() });
 }
 
 export function addProject(dir) {

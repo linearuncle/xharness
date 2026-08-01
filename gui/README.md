@@ -30,7 +30,12 @@ ANTHROPIC_API_KEY=你的key npm start
 - **TodoWrite**：任务清单实时渲染（☐/■/✔）
 - **斜杠命令**：输入 `/` 弹出技能与内置命令（/compact /clear + 项目技能）
 - **@ 文件引用**：输入 `@` 模糊搜索项目文件（rg --files）插入路径
-- **模型菜单**：模型（v4-pro / v4-flash）、推理强度（关闭/低/高/极高）会话内切换
+- **模型菜单**：按供应商分组的模型列表、推理强度（关闭/低/高/极高）会话内切换
+- **设置界面**（侧栏底部 ⚙）：模型供应商管理——默认内置 DeepSeek（不可删）；
+  可添加自定义供应商（名称 / Base URL / API Key / 模型列表），API 格式固定 Anthropic Messages；
+  API Key 支持两种模式：环境变量（ANTHROPIC_API_KEY / DEEPSEEK_API_KEY，界面显示检测状态）
+  或手动填写（可切换明文显示）；模型条目含模型 ID 与上下文窗口；
+  配置持久化于 `~/.xharness/gui/settings.jsonl`（append-only，与会话数据同规范）
 - **上下文条**：项目名 · 本地 · git 分支；右上"环境信息"面板显示变更文件
 - **YOLO 提示**：橙色"⚠ 完全访问"徽标——与 CLI 相同，无沙箱、工具直接执行
 
