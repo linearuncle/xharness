@@ -2,7 +2,7 @@
 # PM 维护；Scout/Worker/Judge 回执粘贴于各任务 receipt 字段
 
 goal: 按 GOAL.md 实现 xharness MVP，六个 tranche 出口全绿
-status: done  # §8 四条标准全部满足，Judge 于 2026-08-01 现场终审通过
+status: done  # MVP 终审通过 + T7 thinking 增量完成（2026-08-01）
 environment:
   node: v22.23.1
   npm: 10.9.8
@@ -250,6 +250,36 @@ tranches:
       git 干净、铁律终扫零违规、最大文件 223 行。
       N1（审计正则补写 /etc 模式）已由 PM 落地销项。
       N2 备注：建议用户本人抽空自行复验一次 TTY 交互体验（非阻塞）。
+
+  T7:
+    title: F19 thinking 档位与思考内容输出（GOAL §4.5，2026-08-01 立项）
+    status: done
+    tasks:
+      - id: T7.1
+        kind: worker
+        title: reasoning.effort 四档下发 + ThinkingDelta 领域事件 + 暗色渲染 + XHARNESS_EFFORT + /effort 命令 + E2E 一例
+        allowed_files: [src/api/client.ts, src/types/messages.ts, src/config.ts, src/agent/loop.ts(仅透传), src/ui/**, src/index.ts, test/unit/**, test/e2e/**, README.md]
+        verify: [npm run build, npx tsc --noEmit, npm test, npm run test:e2e]
+        status: done
+        receipt: |
+          result: partial→passed. commit 02d2398。140 单测绿；全链路交付（config/client/渲染//effort）。
+          诚实升级：端点实测忽略 reasoning.effort（none 仍思考、非法值静默过），
+          thinking:{type:"disabled"} 反而有效——e2e none 例 skip 留证，触发 Judge 裁决。
+      - id: T7.2
+        kind: worker(续用 T7.1 Worker，Judge 裁决 b 实施)
+        title: effort none → thinking:{type:"disabled"} 映射（不与 reasoning 共存），E2E 双例转正
+        allowed_files: [src/api/client.ts, test/unit/client.test.ts, test/e2e/effort.test.ts, README.md, GOAL.md §4.5 指定 bullet(特许)]
+        verify: [npm run build, npx tsc --noEmit, npm test, npm run test:e2e ×2]
+        status: done
+        receipt: |
+          result: done. commit a02147c。142 单测绿；e2e 两轮 7/7 无 retry（none 例转正稳定）；
+          SDK 原生 ThinkingConfigParam 无新增 as；loop 零改动；GOAL/README 同步裁决记录。
+          PM 终验第三轮 e2e 7/7 绿，按 Judge 预授权关闭 T7。
+    judge: |
+      有条件通过→关闭。Judge 现场复核 Worker 端点证据全部属实（none 仍思考 5/5、
+      非法值静默、disabled 2/2 有效、共存时 disabled 胜出）；裁决 b：none 映射
+      thinking.disabled 且不与 reasoning 共存，low/high/max 维持透传；GOAL §4.5 修订文
+      由 Judge 给定。T7.2 落地后 PM 自验免二次 Judge（条件：无新增 as、不碰 loop——均满足）。
 
 known_limitations:
   - B1: 消息数≤10 且单条工具输出巨大时 compact 无法压缩，理论可致上下文溢出；
