@@ -176,6 +176,25 @@ description 文本是工具质量的核心，须参照 Claude Code 的措辞风�
     Ctrl+D 或 `/exit` 退出；回合结束后回到提示符，历史保留在会话内（不跨进程持久化）；
     `/clear` 清空消息历史与 Todo 清单。
 
+### 4.5 Thinking / effort（T7 增量，2026-08-01 立项）
+
+- **F19 思考档位与思考内容输出**
+  - **档位（就这四档，不多不少）**：`none | low | high | max`，对应 DeepSeek Anthropic
+    格式请求参数 `"reasoning": {"effort": "<档位>"}`（官方 Thinking Mode 文档）。
+    默认不传该参数（端点默认 = high）；用户显式设置后才随请求携带。
+  - 配置：`XHARNESS_EFFORT` 环境变量（启动默认）+ `/effort <档位>` 内置命令（会话内切换，
+    下一回合生效；无参数时打印当前档位与可选值）。非法值报错列出四档。
+  - **明确不做**：`budget_tokens`（DeepSeek 忽略之，不实现）；thinking 块的 history
+    回传适配（thinking 内容不入 history，只渲染）。
+  - 流式输出 thinking 内容：`api/client.ts` 处理 `thinking_delta` 流事件，新增领域事件
+    `ThinkingDelta`（§3 铁律联合类型扩一项）；`ui/render.ts` 以暗色（ANSI dim）渲染
+    思考文本，thinking 结束、正文开始时视觉分隔（空行即可）。
+  - `reasoning` 参数经 client 层随请求下发；loop 不感知（铁律不变）。
+  - `/help` 补 `/effort`；README 补档位说明（含 v4-pro 的 low→high 映射现状）。
+  - 验收：单测覆盖——effort 参数按档位正确进请求/默认不传、ThinkingDelta 事件流、
+    /effort 切换与非法值；E2E 一例：`/effort none` 与 `high` 下同一问题，none 无思考
+    输出、high 有暗色思考段。
+
 ## 5. Tranche 划分（PM 按序推进，每个 tranche 结束交 Judge 审）
 
 | Tranche | 内容 | 出口标准 |
@@ -186,6 +205,7 @@ description 文本是工具质量的核心，须参照 Claude Code 的措辞风�
 | T3 交互 | F17 流式渲染、F18 REPL、F11 AskUserQuestion、F11b TodoWrite | 终端可交互完成多步 coding 任务 |
 | T4 上下文 | F4 compact（自动+手动）、F12 项目指令文件（接入 F3 注入钩子） | 超长会话压缩后可继续 |
 | T5 技能 | F13-F16 Skills 系统 + Skill 元工具注册 + 内置命令 | 自定义技能可被 `/name` 和模型两种方式触发 |
+| T7 thinking | F19 思考档位（none/low/high/max）与思考内容流式输出 | /effort 四档可切换；high 下可见暗色思考流，none 下无；单测+E2E 过 |
 
 ## 6. 验证方案
 
