@@ -76,18 +76,16 @@ export async function runTurn(opts: RunTurnOptions): Promise<void> {
       return;
     }
 
-    if (signal?.aborted) {
-      // 流刚结束即被中断：丢弃本次 assistant 输出
-      endInterrupted(history, onEvent);
-      return;
-    }
-
     history.push({ role: "assistant", content: response.content });
 
     const toolUses = response.content.filter(
       (b): b is ToolUseBlock => b.type === "tool_use"
     );
     if (toolUses.length === 0) {
+      if (signal?.aborted) {
+        endInterrupted(history, onEvent);
+        return;
+      }
       onEvent({ type: "turn_end", reason: "end_turn" });
       return;
     }
@@ -96,9 +94,19 @@ export async function runTurn(opts: RunTurnOptions): Promise<void> {
     let hitLimit = false;
     let interrupted = false;
 
-    for (const toolUse of toolUses) {
+    for (let i = 0; i < toolUses.length; i++) {
+      const toolUse = toolUses[i];
       if (signal?.aborted) {
         interrupted = true;
+        // 为所有未执行的 tool_use 回填占位 tool_result，保证 history 配对合法
+        for (let j = i; j < toolUses.length; j++) {
+          results.push({
+            type: "tool_result",
+            tool_use_id: toolUses[j].id,
+            content: "[未执行——回合被中断]",
+            is_error: true,
+          });
+        }
         break;
       }
       if (executed >= maxToolCalls) {
@@ -136,8 +144,8 @@ export async function runTurn(opts: RunTurnOptions): Promise<void> {
     }
 
     if (interrupted) {
-      // 保留已完成回填的 tool_result，丢弃未执行的 tool_use
-      if (results.length > 0) history.push({ role: "user", content: results });
+      // 已完成的 tool_result 保留，未执行的已回填占位，history 配对合法
+      history.push({ role: "user", content: results });
       endInterrupted(history, onEvent);
       return;
     }

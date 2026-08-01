@@ -8,7 +8,12 @@ import type {
 import type { Config } from "../../src/config.js";
 import { History, INTERRUPT_MARKER } from "../../src/session/history.js";
 import { ToolRegistry } from "../../src/tools/registry.js";
-import type { AgentEvent, ToolResultBlock } from "../../src/types/messages.js";
+import type {
+  AgentEvent,
+  Message,
+  ToolResultBlock,
+  ToolUseBlock,
+} from "../../src/types/messages.js";
 import type { Tool, ToolResult } from "../../src/types/tools.js";
 
 const config: Config = {
@@ -56,6 +61,20 @@ function toolUse(id: string, name: string, input: Record<string, unknown> = {}) 
 
 function textResponse(text: string): StreamMessageResult {
   return { content: [{ type: "text", text }], stopReason: "end_turn" };
+}
+
+function expectAllToolUsesPaired(messages: Message[]): void {
+  const toolUseIds = messages.flatMap((m) =>
+    m.content.filter((b): b is ToolUseBlock => b.type === "tool_use").map((b) => b.id)
+  );
+  const resultIds = messages.flatMap((m) =>
+    m.content
+      .filter((b): b is ToolResultBlock => b.type === "tool_result")
+      .map((b) => b.tool_use_id)
+  );
+  for (const id of toolUseIds) {
+    expect(resultIds).toContain(id);
+  }
 }
 
 describe("runTurn", () => {
@@ -212,7 +231,7 @@ describe("runTurn", () => {
     expect(lastResults[1].content).toContain("上限");
   });
 
-  it("abort 中断：保留已完成 tool_result，history 末尾追加中断标记", async () => {
+  it("abort 中断（执行到一半）：保留已完成 tool_result，未执行 tool_use 回填占位，末尾追加中断标记", async () => {
     const controller = new AbortController();
     const registry = new ToolRegistry();
     let betaRan = false;
@@ -252,7 +271,74 @@ describe("runTurn", () => {
     const resultMessage = messages.at(-2)!;
     expect(resultMessage.content).toEqual([
       { type: "tool_result", tool_use_id: "t1", content: "first-done" },
+      {
+        type: "tool_result",
+        tool_use_id: "t2",
+        content: "[未执行——回合被中断]",
+        is_error: true,
+      },
     ]);
+    expectAllToolUsesPaired(messages);
+  });
+
+  it("abort 中断（首个工具执行前）：全部 tool_use 回填占位", async () => {
+    const controller = new AbortController();
+    const executedTools: string[] = [];
+    const registry = new ToolRegistry();
+    registry.register(makeTool("first", async () => {
+      executedTools.push("first");
+      return { content: "first-done" };
+    }));
+    registry.register(makeTool("second", async () => {
+      executedTools.push("second");
+      return { content: "second-done" };
+    }));
+
+    const history = new History();
+    const client: ApiClient = {
+      async streamMessage(): Promise<StreamMessageResult> {
+        controller.abort();
+        return {
+          content: [toolUse("t1", "first"), toolUse("t2", "second")],
+          stopReason: "tool_use",
+        };
+      },
+    };
+    const events: AgentEvent[] = [];
+
+    await runTurn({
+      userInput: "interrupt before tools",
+      history,
+      registry,
+      client,
+      config,
+      system: "sys",
+      signal: controller.signal,
+      onEvent: (e) => events.push(e),
+    });
+
+    expect(executedTools).toEqual([]);
+    expect(events.at(-1)).toEqual({ type: "turn_end", reason: "interrupted" });
+
+    const messages = history.getMessages();
+    expect(messages.at(-1)!.content).toEqual([
+      { type: "text", text: INTERRUPT_MARKER },
+    ]);
+    expect(messages.at(-2)!.content).toEqual([
+      {
+        type: "tool_result",
+        tool_use_id: "t1",
+        content: "[未执行——回合被中断]",
+        is_error: true,
+      },
+      {
+        type: "tool_result",
+        tool_use_id: "t2",
+        content: "[未执行——回合被中断]",
+        is_error: true,
+      },
+    ]);
+    expectAllToolUsesPaired(messages);
   });
 
   it("API 报错时发 error 事件，不崩溃", async () => {
