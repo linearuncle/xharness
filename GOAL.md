@@ -16,7 +16,7 @@
 | 语言 / 运行时 | TypeScript，Node.js >= 20，ESM |
 | LLM 接口 | 仅 Anthropic Messages API **格式**（用 `@anthropic-ai/sdk`），流式（streaming）输出；端点与模型完全可配，不绑定 Anthropic 官方 |
 | 默认端点 | **DeepSeek Anthropic 兼容端点 `https://api.deepseek.com/anthropic`**，可用 `ANTHROPIC_BASE_URL` 环境变量覆盖为官方 Anthropic 或其他兼容端点 |
-| 默认模型 | `deepseek-chat`，可用 `XHARNESS_MODEL` 环境变量覆盖（如 flash 类轻量模型、claude 系列） |
+| 默认模型 | `deepseek-v4-pro`（agentic coding 旗舰），可用 `XHARNESS_MODEL` 环境变量覆盖（如 `deepseek-v4-flash`、claude 系列）。注意旧名 `deepseek-chat`/`deepseek-reasoner` 已于 2026-07 停用，不得使用 |
 | API Key | 读 `ANTHROPIC_API_KEY` 环境变量（填 DeepSeek key 即可），缺失时启动报错并提示 |
 | 权限模式 | 仅 YOLO：所有工具直接执行，无确认弹窗、无权限系统 |
 | CLI 形态 | 终端 REPL 交互（stdin/stdout），入口命令 `xharness`，无 TUI 框架依赖（不用 ink/blessed，用 ANSI 转义即可） |
@@ -152,12 +152,12 @@ npm test             # vitest 单测（一律 mock API，不发真实请求）
 
 ### 6.2 大量端到端 / 集成测试（用 DeepSeek Anthropic 兼容端点）
 
-真实 LLM 参与的测试统一走 DeepSeek 端点（即默认端点，无需覆盖）+ 轻量 flash 类模型，
-成本低、可大量跑，用于 T2 之后每个 tranche 的出口验证与回归：
+真实 LLM 参与的测试统一走 DeepSeek 端点（即默认端点，无需覆盖）+ 轻量模型
+`deepseek-v4-flash`，成本低、可大量跑，用于 T2 之后每个 tranche 的出口验证与回归：
 
 ```bash
 export ANTHROPIC_API_KEY=$DEEPSEEK_API_KEY
-export XHARNESS_MODEL=<flash 轻量模型>   # 具体模型名写入 .env.test，不硬编码；默认 deepseek-chat
+export XHARNESS_MODEL=deepseek-v4-flash   # E2E 统一用 flash，写入 .env.test
 npm run test:e2e
 ```
 
