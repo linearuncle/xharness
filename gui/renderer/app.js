@@ -687,7 +687,10 @@ async function boot() {
     const sc = $("chat-scroll");
     stickBottom = sc.scrollHeight - sc.scrollTop - sc.clientHeight < 60;
   });
-  document.addEventListener("click", (e) => {
+  // 用 mousedown 判定"点击菜单外关闭"：click 阶段菜单内容可能已被子菜单渲染替换，
+  // 被点元素脱离 DOM 会让 contains() 误判为外部点击（导致子菜单打不开）
+  document.addEventListener("mousedown", (e) => {
+    if (!e.target.isConnected) return;
     if (!$("model-menu").contains(e.target) && e.target.id !== "model-label" && !$("model-label").contains(e.target))
       $("model-menu").classList.add("hidden");
   });

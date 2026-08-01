@@ -104,10 +104,14 @@ body {
 #chat-header .icon-btn { -webkit-app-region: no-drag; }
 .ch-folder { color: var(--text-2); }
 
-/* 空状态 */
+/* 空状态：不做整块拖拽区（会拦截浮层点击），只留顶部细条 */
 #empty-state {
   flex: 1; display: flex; flex-direction: column;
   align-items: center; justify-content: center; padding: 0 40px;
+  position: relative;
+}
+.main-drag-strip {
+  position: absolute; top: 0; left: 0; right: 0; height: 38px;
   -webkit-app-region: drag;
 }
 #empty-state h1 { font-size: 28px; font-weight: 650; margin: 26px 0 40px; }
