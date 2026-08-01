@@ -10,9 +10,9 @@ export interface Skill {
 }
 
 export interface LoadSkillsOptions {
-  /** 全局技能目录，默认 ~/.xharness/skills */
+  /** 全局技能目录，默认 ~/.agents/skills */
   globalDir?: string;
-  /** 项目技能目录，默认 <cwd>/.xharness/skills */
+  /** 项目技能目录，默认 <cwd>/.agents/skills */
   projectDir?: string;
   cwd?: string;
   warn?: (message: string) => void;
@@ -79,9 +79,9 @@ function parseSkillFile(
  */
 export function loadSkills(opts: LoadSkillsOptions = {}): Skill[] {
   const warn = opts.warn ?? ((message) => console.warn(message));
-  const globalDir = opts.globalDir ?? join(homedir(), ".xharness", "skills");
+  const globalDir = opts.globalDir ?? join(homedir(), ".agents", "skills");
   const projectDir =
-    opts.projectDir ?? join(opts.cwd ?? process.cwd(), ".xharness", "skills");
+    opts.projectDir ?? join(opts.cwd ?? process.cwd(), ".agents", "skills");
 
   const byName = new Map<string, Skill>();
   for (const root of [globalDir, projectDir]) {

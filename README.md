@@ -104,8 +104,8 @@ xharness --version          # 打印版本
 技能目录结构（两级，项目级覆盖全局同名技能）：
 
 ```
-~/.xharness/skills/<name>/SKILL.md          # 全局
-<项目根>/.xharness/skills/<name>/SKILL.md   # 项目级，覆盖全局同名
+~/.agents/skills/<name>/SKILL.md          # 全局（跨 harness 通用目录，可与其他 agent 工具共享技能）
+<项目根>/.agents/skills/<name>/SKILL.md   # 项目级，覆盖全局同名
 ```
 
 `SKILL.md` 使用与 Claude Code 兼容的 frontmatter 格式（`name`、`description`），正文即技能指令体。示例：

@@ -149,7 +149,7 @@ description 文本是工具质量的核心，须参照 Claude Code 的措辞风�
 ### 4.3 Skills / 斜杠命令系统（`src/skills/`）
 
 - **F13 Skill 加载器**
-  - 扫描目录：`~/.xharness/skills/<name>/SKILL.md` 与 `<project>/.xharness/skills/<name>/SKILL.md`（项目级覆盖全局同名）。
+  - 扫描目录：`~/.agents/skills/<name>/SKILL.md` 与 `<project>/.agents/skills/<name>/SKILL.md`（项目级覆盖全局同名；2026-08-02 由 `.xharness/` 改为跨 harness 通用的 `.agents/`，与 AGENTS.md 同生态、不自创专属目录名）。
   - frontmatter 兼容 Claude Code 格式：`name`、`description`（用 gray-matter 解析）。
   - 验收：目录不存在时静默跳过；损坏的 frontmatter 打警告不崩溃。
 - **F14 用户触发**：REPL 中输入 `/<name> [args]` → 该技能指令体 + args 注入本回合用户消息。

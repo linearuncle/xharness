@@ -23,7 +23,7 @@ describeE2E("e2e: 技能触发", () => {
 
   beforeEach(() => {
     sandbox = makeSandbox();
-    const skillDir = join(sandbox, ".xharness", "skills", "greeter");
+    const skillDir = join(sandbox, ".agents", "skills", "greeter");
     mkdirSync(skillDir, { recursive: true });
     writeFileSync(join(skillDir, "SKILL.md"), SKILL_MD);
   });
