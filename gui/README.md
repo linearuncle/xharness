@@ -1,6 +1,6 @@
 # xharness GUI
 
-基于 Electron 的图形界面 harness，底层引擎完全复用 xharness（`../dist`）：
+基于 Electron 的图形界面，底层引擎完全复用 xharness（`../dist`）：
 Agent 主循环、9 个工具、流式 API 客户端、compact、Skills、thinking 档位。
 
 ## 启动
@@ -39,7 +39,7 @@ ANTHROPIC_API_KEY=你的key npm start
 - **上下文条**：项目名 · 本地 · git 分支；右上"环境信息"面板显示变更文件
 - **YOLO 提示**：橙色"⚠ 完全访问"徽标——与 CLI 相同，无沙箱、工具直接执行
 
-## 已知限制（MVP）
+## 已知限制
 
 - 会话重开后仅以文本种子恢复历史（工具调用细节不回放给模型）
 - 同一时间只渲染当前打开会话的事件流

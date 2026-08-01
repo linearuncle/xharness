@@ -161,7 +161,7 @@ npm start          # 需 ANTHROPIC_API_KEY 或 DEEPSEEK_API_KEY
 
 - **B1 压缩下限**：上下文压缩保留最近 10 条原始消息。当消息总数 ≤ 10 且其中单条工具输出巨大时，compact 无法压缩，理论上可导致上下文溢出。真实 1M 窗口 + Bash 输出 30K 字符截断的前提下，仅 Read 病态大文件等极端情况可能触达，概率极低。
 - **工具串行执行**：同一响应中的多个工具调用严格按顺序逐个执行，不并行（有意为之）。
-- **MVP 明确不做**：子代理/多代理编排、MCP 协议、Hooks/settings.json 配置体系、YOLO 之外的权限确认模式、Plan 模式、持久记忆、OpenAI 等其他 provider 格式、markdown 终端渲染/TUI 框架、运行时沙箱。
+- **当前版本暂不提供**：子代理/多代理编排、MCP 协议、Hooks/settings.json 配置体系、YOLO 之外的权限确认模式、Plan 模式、持久记忆、OpenAI 等其他 provider 格式、markdown 终端渲染/TUI 框架、运行时沙箱。
 
 ## 开发
 
