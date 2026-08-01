@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from "electron";
+import { app, BrowserWindow, ipcMain, dialog, nativeImage } from "electron";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { userInfo } from "node:os";
@@ -15,8 +15,14 @@ function escapeHtml(s) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+const appIcon = nativeImage.createFromPath(join(here, "assets", "icon.png"));
+
 function createWindow() {
+  if (process.platform === "darwin" && !appIcon.isEmpty()) {
+    app.dock.setIcon(appIcon);
+  }
   win = new BrowserWindow({
+    icon: appIcon,
     width: 1720,
     height: 1080,
     minWidth: 1000,
