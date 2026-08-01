@@ -32,14 +32,15 @@ function endInterrupted(history: History, onEvent: (e: AgentEvent) => void): voi
 
 async function executeTool(
   registry: ToolRegistry,
-  toolUse: ToolUseBlock
+  toolUse: ToolUseBlock,
+  signal?: AbortSignal
 ): Promise<ToolResult> {
   const tool = registry.get(toolUse.name);
   if (!tool) {
     return { content: `未知工具: ${toolUse.name}`, isError: true };
   }
   try {
-    return await tool.execute(toolUse.input);
+    return await tool.execute(toolUse.input, { signal });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return { content: `工具执行异常: ${message}`, isError: true };
@@ -126,7 +127,7 @@ export async function runTurn(opts: RunTurnOptions): Promise<void> {
         name: toolUse.name,
         input: toolUse.input,
       });
-      const result = await executeTool(registry, toolUse);
+      const result = await executeTool(registry, toolUse, signal);
       onEvent({
         type: "tool_end",
         id: toolUse.id,

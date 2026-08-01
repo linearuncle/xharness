@@ -16,11 +16,22 @@ export interface ToolResult {
   isError?: boolean;
 }
 
+export interface ToolExecuteContext {
+  signal?: AbortSignal;
+}
+
+export type TodoStatus = "pending" | "in_progress" | "completed";
+
+export interface TodoItem {
+  content: string;
+  status: TodoStatus;
+}
+
 export interface Tool {
   name: string;
   description: string;
   inputSchema: ToolInputSchema;
-  execute(input: unknown): Promise<ToolResult>;
+  execute(input: unknown, context?: ToolExecuteContext): Promise<ToolResult>;
 }
 
 export function toolError(message: string): ToolResult {

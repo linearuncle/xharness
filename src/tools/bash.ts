@@ -1,5 +1,11 @@
 import { spawn } from "node:child_process";
-import { asRecord, toolError, type Tool, type ToolResult } from "../types/tools.js";
+import {
+  asRecord,
+  toolError,
+  type Tool,
+  type ToolExecuteContext,
+  type ToolResult,
+} from "../types/tools.js";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_TIMEOUT_MS = 600_000;
@@ -40,11 +46,15 @@ export const bashTool: Tool = {
     },
     required: ["command"],
   },
-  execute(input: unknown): Promise<ToolResult> {
+  execute(input: unknown, context?: ToolExecuteContext): Promise<ToolResult> {
     const args = asRecord(input);
+    const signal = context?.signal;
     const command = args.command;
     if (typeof command !== "string" || command.length === 0) {
       return Promise.resolve(toolError("Bash: `command` is required and must be a non-empty string"));
+    }
+    if (signal?.aborted) {
+      return Promise.resolve(toolError("Command was interrupted before execution."));
     }
     let timeout = DEFAULT_TIMEOUT_MS;
     if (args.timeout !== undefined) {
@@ -73,6 +83,20 @@ export const bashTool: Tool = {
 
       let output = "";
       let timedOut = false;
+      let interrupted = false;
+      const onAbort = () => {
+        interrupted = true;
+        try {
+          if (child.pid !== undefined) process.kill(-child.pid, "SIGTERM");
+        } catch {
+          try {
+            child.kill("SIGTERM");
+          } catch {
+            // process already gone
+          }
+        }
+      };
+      signal?.addEventListener("abort", onAbort, { once: true });
       const timer = setTimeout(() => {
         timedOut = true;
         try {
@@ -94,12 +118,19 @@ export const bashTool: Tool = {
       });
       child.on("error", (err) => {
         clearTimeout(timer);
+        signal?.removeEventListener("abort", onAbort);
         done(toolError(`Bash: failed to spawn: ${err.message}`));
       });
       child.on("close", (code) => {
         clearTimeout(timer);
+        signal?.removeEventListener("abort", onAbort);
         const content = truncateOutput(output);
-        if (timedOut) {
+        if (interrupted) {
+          done({
+            content: `Command was interrupted; SIGTERM sent to process group.\n${content}`,
+            isError: true,
+          });
+        } else if (timedOut) {
           done({
             content: `Command timed out after ${timeout}ms; process group killed.\n${content}`,
             isError: true,

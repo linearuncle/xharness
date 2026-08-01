@@ -34,6 +34,32 @@ describe("Bash tool", () => {
     expect(result.content).toContain("Exit code: 3");
   });
 
+  it("abort 信号触发后对进程组发 SIGTERM 并标注被中断", async () => {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 300);
+    const start = Date.now();
+    const result = await bashTool.execute(
+      { command: "sleep 10" },
+      { signal: controller.signal }
+    );
+    expect(Date.now() - start).toBeLessThan(3000);
+    expect(result.isError).toBe(true);
+    expect(result.content).toContain("interrupted");
+    expect(result.content).toContain("SIGTERM");
+  }, 10_000);
+
+  it("已 abort 的信号直接返回中断错误，不执行命令", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const result = await bashTool.execute(
+      { command: "echo should-not-run" },
+      { signal: controller.signal }
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content).toContain("interrupted");
+    expect(result.content).not.toContain("should-not-run");
+  });
+
   it("缺少 command 参数返回错误而不抛异常", async () => {
     const result = await bashTool.execute({});
     expect(result.isError).toBe(true);
