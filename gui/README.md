@@ -56,3 +56,17 @@ GUI 与 CLI 完全一致：模型发起的文件读写与 shell 命令在你的�
 - "手动填写"的 API Key 经 `safeStorage`（系统钥匙串）加密后存于 `~/.xharness/gui/settings.jsonl`（权限 600），磁盘零明文
 - 附件与粘贴的图片保存在 `~/.xharness/gui/attachments/`
 - 风险自负；威胁模型与漏洞报告见仓库根目录 `SECURITY.md`
+
+## 打包本地安装（macOS）
+
+```bash
+cd .. && npm run build     # 先构建引擎
+cd gui && npm install      # postinstall 会自动改名 Electron 骨架
+node scripts/package-app.mjs
+```
+
+产物：`<仓库根>/release/xharness.app`（自包含，约 260MB），拖入 /Applications 即可；
+ad-hoc 签名，首次打开若被 Gatekeeper 拦截，右键 → 打开。
+
+注意：**Finder 启动的应用不继承 shell 环境变量**，打包版请在设置中"手动填写"
+API Key（safeStorage 加密），或用 `launchctl setenv ANTHROPIC_API_KEY ...` 注入。

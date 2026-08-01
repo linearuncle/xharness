@@ -1,0 +1,82 @@
+// 打包自包含的 xharness.app（macOS 本地安装用）：
+//   1. 组装 staging：应用代码（gui/ + dist/）+ 仅生产依赖的 node_modules
+//   2. 复制已改名的 Electron 骨架（xharness.app，含图标与 Info.plist）
+//   3. staging 放入 Contents/Resources/app（Electron 优先加载此目录）
+//   4. ad-hoc 重签
+// 产物：<repo>/release/xharness.app —— 拖入 /Applications 即可。
+// 注意：Finder 启动的 GUI 不继承 shell 环境变量；打包版建议在设置中"手动填写"
+// API Key（safeStorage 加密），或用 launchctl setenv 注入环境变量。
+import { execFileSync, execSync } from "node:child_process";
+import {
+  existsSync, mkdirSync, rmSync, cpSync, writeFileSync, readFileSync,
+} from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const GUI = join(here, "..");
+const ROOT = join(GUI, "..");
+const RELEASE = join(ROOT, "release");
+const STAGING = join(RELEASE, "staging");
+const APP_SRC = join(GUI, "node_modules", "electron", "dist", "xharness.app");
+const APP_OUT = join(RELEASE, "xharness.app");
+
+const run = (cmd, cwd) => execSync(cmd, { cwd, stdio: "inherit" });
+
+if (!existsSync(join(ROOT, "dist", "index.js"))) {
+  console.error("先构建引擎：npm run build（仓库根目录）");
+  process.exit(1);
+}
+if (!existsSync(APP_SRC)) {
+  console.error("未找到改名后的 Electron 骨架，先运行 scripts/patch-electron-name.mjs");
+  process.exit(1);
+}
+
+console.log("1/5 组装 staging …");
+rmSync(RELEASE, { recursive: true, force: true });
+mkdirSync(STAGING, { recursive: true });
+
+const rootPkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+const guiPkg = JSON.parse(readFileSync(join(GUI, "package.json"), "utf8"));
+writeFileSync(
+  join(STAGING, "package.json"),
+  JSON.stringify(
+    {
+      name: "xharness",
+      version: guiPkg.version,
+      type: "module",
+      main: "gui/main.js",
+      license: "MIT",
+      dependencies: { ...rootPkg.dependencies, marked: guiPkg.dependencies.marked, dompurify: guiPkg.dependencies.dompurify },
+    },
+    null,
+    2
+  )
+);
+
+cpSync(join(ROOT, "dist"), join(STAGING, "dist"), { recursive: true });
+mkdirSync(join(STAGING, "gui"), { recursive: true });
+for (const f of ["main.js", "engine.js", "store.js", "preload.cjs"]) {
+  cpSync(join(GUI, f), join(STAGING, "gui", f));
+}
+cpSync(join(GUI, "renderer"), join(STAGING, "gui", "renderer"), { recursive: true });
+cpSync(join(GUI, "assets"), join(STAGING, "gui", "assets"), { recursive: true });
+
+console.log("2/5 安装生产依赖 …");
+run("npm install --omit=dev --no-audit --no-fund --loglevel=error", STAGING);
+rmSync(join(STAGING, "package-lock.json"), { force: true });
+
+console.log("3/5 复制应用骨架 …");
+// 用 ditto 保留框架内的符号链接结构（cpSync 会破坏，导致 codesign 报 unsealed contents）
+execFileSync("ditto", [APP_SRC, APP_OUT]);
+rmSync(join(APP_OUT, "Contents", "Resources", "default_app.asar"), { force: true });
+
+console.log("4/5 注入应用代码 …");
+cpSync(STAGING, join(APP_OUT, "Contents", "Resources", "app"), { recursive: true });
+rmSync(STAGING, { recursive: true, force: true });
+
+console.log("5/5 ad-hoc 签名 …");
+execFileSync("codesign", ["--force", "--deep", "--sign", "-", APP_OUT], { stdio: "ignore" });
+
+console.log(`完成：${APP_OUT}`);
+console.log("安装：拖入 /Applications；首次打开若被 Gatekeeper 拦截，右键 → 打开。");
