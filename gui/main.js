@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, dialog, nativeImage } from "electron";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { userInfo } from "node:os";
@@ -8,6 +9,8 @@ import * as engine from "./engine.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 let win = null;
+
+app.setName("xharness");
 
 marked.setOptions({ breaks: true });
 
@@ -144,18 +147,59 @@ ipcMain.handle("chat:stop", (_e, id) => engine.stop(id));
 
 ipcMain.handle("block:append", (_e, { id, block }) => store.appendBlock(id, block));
 
-ipcMain.handle("chat:send", async (_e, { id, text }) => {
+ipcMain.handle("attach:pick", async () => {
+  const r = await dialog.showOpenDialog(win, {
+    properties: ["openFile", "multiSelections"],
+    filters: [
+      { name: "图片", extensions: ["png", "jpg", "jpeg", "webp", "gif"] },
+      { name: "所有文件", extensions: ["*"] },
+    ],
+  });
+  if (r.canceled) return [];
+  return r.filePaths.map((p) => ({ path: p, name: p.split("/").pop() }));
+});
+
+const IMAGE_MEDIA = {
+  png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg",
+  webp: "image/webp", gif: "image/gif",
+};
+
+function loadAttachments(paths) {
+  const out = [];
+  for (const p of paths ?? []) {
+    try {
+      const ext = p.split(".").pop().toLowerCase();
+      const media = IMAGE_MEDIA[ext];
+      const data = readFileSync(p);
+      if (media) {
+        out.push({ kind: "image", name: p.split("/").pop(), mediaType: media, base64: data.toString("base64") });
+      } else {
+        // 非图片附件：以文本形式注入（截断保护）
+        out.push({ kind: "text", name: p.split("/").pop(), text: data.toString("utf8").slice(0, 30000) });
+      }
+    } catch (err) {
+      out.push({ kind: "error", name: p, text: err.message });
+    }
+  }
+  return out;
+}
+
+ipcMain.handle("chat:send", async (_e, { id, text, attachmentPaths }) => {
   const c = store.getConversation(id);
   if (!c) return;
   if (store.setTitle(id, text.replace(/\s+/g, " ").slice(0, 16))) {
     win?.webContents.send("sidebar:update", store.sidebarData());
+  }
+  const attachments = loadAttachments(attachmentPaths);
+  for (const a of attachments) {
+    store.appendBlock(id, { kind: "attachment", name: a.name, type: a.kind });
   }
   store.appendBlock(id, { kind: "user", text });
   const emit = (event) => {
     if (event.type === "cleared") store.clearBlocks(id);
     win?.webContents.send("agent:event", { id, event });
   };
-  await engine.send(id, c.projectDir, text, c.blocks, emit);
+  await engine.send(id, c.projectDir, text, c.blocks, emit, attachments);
 });
 
 ipcMain.handle("user:escape", (_e, text) => escapeHtml(text ?? ""));

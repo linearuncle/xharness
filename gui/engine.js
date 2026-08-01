@@ -32,7 +32,7 @@ export const EFFORTS = [
   { value: "none", label: "关闭" },
   { value: "low", label: "低" },
   { value: "high", label: "高" },
-  { value: "max", label: "极高" },
+  { value: "max", label: "Max" },
 ];
 
 function enabledProviders() {
@@ -259,8 +259,24 @@ export function searchFiles(projectDir, query) {
     .slice(0, 8);
 }
 
+// 附件 → 前置一条含 image/文本块的 user 消息（Anthropic 格式允许连续 user 消息）
+function pushAttachments(history, attachments) {
+  const blocks = [];
+  for (const a of attachments ?? []) {
+    if (a.kind === "image") {
+      blocks.push({
+        type: "image",
+        source: { type: "base64", media_type: a.mediaType, data: a.base64 },
+      });
+    } else if (a.kind === "text") {
+      blocks.push({ type: "text", text: `[附件 ${a.name}]\n${a.text}` });
+    }
+  }
+  if (blocks.length) history.push({ role: "user", content: blocks });
+}
+
 // 发送一条用户输入。事件经 s.emit 流出（含合成事件 notice/ask/todos）。
-export async function send(convId, projectDir, text, savedBlocks, emit) {
+export async function send(convId, projectDir, text, savedBlocks, emit, attachments) {
   const s = getSession(convId, projectDir, savedBlocks);
   s.emit = emit;
   if (s.running) {
@@ -331,6 +347,7 @@ export async function send(convId, projectDir, text, savedBlocks, emit) {
     } else if (r.warning) {
       emit({ type: "notice", text: `[压缩警告] ${r.warning}` });
     }
+    pushAttachments(s.history, attachments);
     await runTurn({
       userInput: turnInput,
       history: s.history,

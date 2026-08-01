@@ -13,9 +13,10 @@ const S = {
   turn: null, // 当前流式回合的渲染状态
   meta: { providerId: null, model: "", effort: "" },
   settings: { activeProviderId: null, draft: null }, // 设置界面状态
+  attachments: [], // [{path,name,isImage}]
 };
 
-const EFFORT_LABEL = { "": "默认", none: "关闭", low: "低", high: "高", max: "极高" };
+const EFFORT_LABEL = { "": "默认", none: "关闭", low: "低", high: "高", max: "Max" };
 const modelShort = (m) => (m ? m.replace(/^deepseek-/, "") : "未配置");
 
 function defaultChoice() {
@@ -166,6 +167,8 @@ function renderStoredBlock(list, b) {
     list.appendChild(toolLineEl(b.summary, b.isError));
   } else if (b.kind === "notice") {
     list.appendChild(el(`<div class="notice">${esc(b.text)}</div>`));
+  } else if (b.kind === "attachment") {
+    list.appendChild(el(`<div class="msg-user"><div class="bubble">📎 ${esc(b.name)}</div></div>`));
   } else if (b.kind === "ask") {
     const d = el(
       `<div class="ask-block answered"><div class="ask-q">${esc(b.question)}</div><div class="notice">${esc(b.answer ?? "")}</div></div>`
@@ -204,11 +207,17 @@ async function sendCurrent() {
     $("chat-title").textContent = text.slice(0, 16);
 
   const list = $("chat-list");
+  for (const a of S.attachments) {
+    list.appendChild(el(`<div class="msg-user"><div class="bubble">📎 ${esc(a.name)}</div></div>`));
+  }
   list.appendChild(el(`<div class="msg-user"><div class="bubble">${esc(text)}</div></div>`));
   beginTurn(list);
   setRunning(true);
   scrollBottom(true);
-  api.send(S.activeConv, text);
+  const paths = S.attachments.map((a) => a.path);
+  S.attachments = [];
+  renderAttachChips();
+  api.send(S.activeConv, text, paths);
 }
 
 function beginTurn(list) {
@@ -630,11 +639,20 @@ async function boot() {
   S.efforts = st.efforts;
   S.sidebar = st.sidebar;
   S.meta = { ...defaultChoice(), effort: "" };
-  $("username").textContent = st.username;
-  $("avatar").textContent = st.username.slice(0, 1);
+  $("username").textContent = "xharness";
+  $("avatar").textContent = "x";
   updateModelLabel();
   renderSidebar();
   bindSettings();
+  bindPlusMenu();
+
+  // 全局快捷键：Cmd+N 新对话 / Cmd+O 添加项目
+  window.addEventListener("keydown", (e) => {
+    if (!(e.metaKey || e.ctrlKey)) return;
+    const k = e.key.toLowerCase();
+    if (k === "n") { e.preventDefault(); newConversation(); }
+    else if (k === "o") { e.preventDefault(); addProject(); }
+  });
   const first = S.sidebar.projects[0];
   if (first) await selectProject(first.dir);
 
@@ -914,4 +932,70 @@ function openModelDialog(onSave) {
 function closeModelDialog() {
   $("modal-backdrop").classList.add("hidden");
   modelDialogSave = null;
+}
+
+/* ---------------- + 插入菜单与附件 ---------------- */
+
+function bindPlusMenu() {
+  const menu = $("plus-menu");
+  $("btn-plus").onclick = (e) => {
+    e.stopPropagation();
+    menu.classList.toggle("hidden");
+  };
+  document.addEventListener("mousedown", (e) => {
+    if (!e.target.isConnected) return;
+    if (!menu.contains(e.target) && e.target.id !== "btn-plus")
+      menu.classList.add("hidden");
+  });
+  $("pm-attach").onclick = async () => {
+    menu.classList.add("hidden");
+    const files = await api.pickAttachments();
+    for (const f of files) {
+      if (S.attachments.some((a) => a.path === f.path)) continue;
+      const ext = f.name.split(".").pop().toLowerCase();
+      S.attachments.push({
+        ...f,
+        isImage: ["png", "jpg", "jpeg", "webp", "gif"].includes(ext),
+      });
+    }
+    renderAttachChips();
+  };
+  $("pm-mention").onclick = () => {
+    menu.classList.add("hidden");
+    insertAtCaret("@");
+  };
+  $("pm-slash").onclick = () => {
+    menu.classList.add("hidden");
+    const input = $("input");
+    input.value = "/" + input.value;
+    input.focus();
+    input.setSelectionRange(1, 1);
+    updatePopup();
+  };
+}
+
+function insertAtCaret(textToInsert) {
+  const input = $("input");
+  const pos = input.selectionStart ?? input.value.length;
+  input.value = input.value.slice(0, pos) + textToInsert + input.value.slice(pos);
+  input.focus();
+  input.setSelectionRange(pos + textToInsert.length, pos + textToInsert.length);
+  updatePopup();
+}
+
+function renderAttachChips() {
+  const box = $("attach-chips");
+  box.innerHTML = "";
+  if (!S.attachments.length) { box.classList.add("hidden"); return; }
+  box.classList.remove("hidden");
+  for (const a of S.attachments) {
+    const chip = el(`<span class="attach-chip">${
+      a.isImage ? `<img src="file://${esc(a.path)}" alt="" />` : "📄"
+    }<span>${esc(a.name)}</span><span class="x" title="移除">✕</span></span>`);
+    chip.querySelector(".x").onclick = () => {
+      S.attachments = S.attachments.filter((x) => x !== a);
+      renderAttachChips();
+    };
+    box.appendChild(chip);
+  }
 }

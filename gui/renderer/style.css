@@ -383,3 +383,28 @@ body.settings-open #chat-header,
 body.settings-open .sb-titlebar {
   -webkit-app-region: no-drag;
 }
+
+/* + 插入菜单 */
+#plus-menu {
+  position: absolute; left: 12px; bottom: 52px; z-index: 30;
+  background: #fff; border: 1px solid var(--card-border); border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(0,0,0,.12); min-width: 180px; padding: 6px;
+  font-size: 13.5px;
+}
+.pm-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; border-radius: 8px; cursor: pointer;
+}
+.pm-item:hover { background: #f4f4f2; }
+.pm-ic { width: 18px; text-align: center; color: var(--text-2); }
+
+/* 附件 chips */
+#attach-chips { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 8px; }
+.attach-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: #f1f1ef; border-radius: 8px; padding: 4px 8px; font-size: 12.5px;
+}
+.attach-chip img { width: 28px; height: 28px; object-fit: cover; border-radius: 5px; }
+.attach-chip .x { cursor: pointer; color: var(--text-3); }
+.attach-chip .x:hover { color: var(--text); }
+.attach-note { color: var(--text-3); font-size: 12.5px; }
