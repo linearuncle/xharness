@@ -1,0 +1,16 @@
+{
+  "name": "xharness-gui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "dependencies": {
+    "marked": "^12.0.0"
+  },
+  "devDependencies": {
+    "electron": "^37.0.0"
+  }
+}

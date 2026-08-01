@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>xharness</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- 左侧栏 -->
+    <aside id="sidebar">
+      <div class="sb-titlebar">
+        <div class="sb-appname">xharness <span class="chev">▾</span></div>
+        <div class="sb-titleicons">
+          <span class="icon-btn" title="搜索">⌕</span>
+          <span class="icon-btn" title="通知">🔔</span>
+        </div>
+      </div>
+      <nav class="sb-nav">
+        <div class="sb-item primary" id="btn-new-conv"><span class="ic">✎</span>新对话</div>
+        <div class="sb-item disabled"><span class="ic">⇅</span>拉取请求</div>
+        <div class="sb-item disabled"><span class="ic">▦</span>站点</div>
+        <div class="sb-item disabled"><span class="ic">◷</span>已安排</div>
+        <div class="sb-item disabled"><span class="ic">@</span>插件</div>
+      </nav>
+      <div class="sb-scroll">
+        <div id="sb-pinned-section" class="hidden">
+          <div class="sb-section">置顶</div>
+          <div id="sb-pinned"></div>
+        </div>
+        <div class="sb-section sb-projects-header">
+          <span>项目</span>
+          <span class="sb-section-actions">
+            <span class="icon-btn" title="更多">…</span>
+            <span class="icon-btn" id="btn-add-project" title="添加项目">＋</span>
+          </span>
+        </div>
+        <div id="sb-projects"></div>
+      </div>
+      <div class="sb-footer">
+        <span class="avatar" id="avatar">x</span>
+        <span id="username">…</span>
+        <span class="icon-btn help" title="帮助">?</span>
+      </div>
+    </aside>
+
+    <!-- 主区 -->
+    <main id="main">
+      <div id="chat-header" class="hidden">
+        <span class="ch-folder">▤</span>
+        <span id="chat-title"></span>
+        <span class="icon-btn" title="更多">…</span>
+        <span class="spacer"></span>
+        <span class="icon-btn" id="btn-env" title="环境信息">☰</span>
+      </div>
+
+      <!-- 空状态 -->
+      <section id="empty-state">
+        <div class="es-icon">
+          <svg width="72" height="60" viewBox="0 0 72 60" fill="none">
+            <path d="M20 12 C8 12 4 22 10 30 C2 34 6 48 16 48 L52 48 C66 48 68 34 58 30 C64 20 54 8 42 14 C38 6 26 6 20 12 Z" stroke="#111" stroke-width="3" fill="none" stroke-linejoin="round"/>
+            <path d="M27 26 L34 32 L27 38" stroke="#111" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M38 39 L48 39" stroke="#111" stroke-width="3" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <h1 id="es-heading">要在 <u id="es-folder">…</u> 内开发什么?</h1>
+        <div class="es-cards">
+          <div class="es-card" data-prompt="探索并理解这个代码库的整体结构，给我一份导览。">
+            <div class="es-card-icon" style="color:#3b82f6">🔭</div>
+            <div>探索并理解代码</div>
+          </div>
+          <div class="es-card" data-prompt="我想构建一个新功能：">
+            <div class="es-card-icon" style="color:#8b5cf6">🔨</div>
+            <div>构建新功能、应用或工具</div>
+          </div>
+          <div class="es-card" data-prompt="审查当前代码并提出修改建议。">
+            <div class="es-card-icon" style="color:#10b981">✅</div>
+            <div>审查代码并提出修改建议</div>
+          </div>
+          <div class="es-card" data-prompt="帮我修复以下问题：">
+            <div class="es-card-icon" style="color:#f97316">🐞</div>
+            <div>修复问题和失败</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 会话流 -->
+      <section id="chat-scroll" class="hidden">
+        <div id="chat-list"></div>
+      </section>
+
+      <!-- 输入区 -->
+      <section id="composer-wrap">
+        <div id="context-bar">
+          <span class="ctx-chip">▤ <span id="ctx-folder">—</span></span>
+          <span class="ctx-chip">🖥 本地</span>
+          <span class="ctx-chip" id="ctx-branch-chip">⎇ <span id="ctx-branch">—</span></span>
+        </div>
+        <div id="composer">
+          <div id="popup" class="hidden"></div>
+          <textarea id="input" rows="1" placeholder="随心输入"></textarea>
+          <div id="composer-bar">
+            <span class="icon-btn disabled" title="附件">＋</span>
+            <span id="yolo-badge" title="YOLO 模式：所有工具直接执行，无确认、无沙箱">⚠ 完全访问</span>
+            <span class="spacer"></span>
+            <span id="model-label" title="模型与推理强度">… <span class="chev">▾</span></span>
+            <span class="icon-btn disabled" title="语音">🎙</span>
+            <button id="btn-send" title="发送">↑</button>
+          </div>
+          <div id="model-menu" class="hidden"></div>
+        </div>
+      </section>
+
+      <!-- 环境信息面板 -->
+      <aside id="env-panel" class="hidden">
+        <div class="env-title">环境信息 <span class="icon-btn" id="btn-env-close">✕</span></div>
+        <div class="env-row" id="env-changes">🗇 变更</div>
+        <div class="env-row">🖥 本地</div>
+        <div class="env-row" id="env-branch">⎇ —</div>
+        <div class="env-row disabled">◎ 提交或推送</div>
+        <div class="env-row disabled dim">🐙 未配置拉取请求</div>
+        <div id="env-changes-list"></div>
+      </aside>
+    </main>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
