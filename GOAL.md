@@ -179,9 +179,12 @@ description 文本是工具质量的核心，须参照 Claude Code 的措辞风�
 ### 4.5 Thinking / effort（T7 增量，2026-08-01 立项）
 
 - **F19 思考档位与思考内容输出**
-  - **档位（就这四档，不多不少）**：`none | low | high | max`，对应 DeepSeek Anthropic
-    格式请求参数 `"reasoning": {"effort": "<档位>"}`（官方 Thinking Mode 文档）。
-    默认不传该参数（端点默认 = high）；用户显式设置后才随请求携带。
+  - **档位（就这四档，不多不少）**：`none | low | high | max`。`low/high/max` 对应
+    DeepSeek Anthropic 格式参数 `"reasoning": {"effort": "<档位>"}`；`none` 在 client 层
+    映射为 Anthropic 官方参数 `"thinking": {"type": "disabled"}` 且不携带 reasoning——
+    2026-08-01 实测端点忽略 `reasoning.effort`（none 仍思考、非法值静默接受），而
+    `thinking.disabled` 可真正关闭（Judge T7 裁决 b；上游若修复 effort，none 行为
+    不受影响）。默认不传任何参数（端点默认 = high）。
   - 配置：`XHARNESS_EFFORT` 环境变量（启动默认）+ `/effort <档位>` 内置命令（会话内切换，
     下一回合生效；无参数时打印当前档位与可选值）。非法值报错列出四档。
   - **明确不做**：`budget_tokens`（DeepSeek 忽略之，不实现）；thinking 块的 history

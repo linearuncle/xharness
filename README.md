@@ -72,7 +72,7 @@ xharness --version          # 打印版本
 
 ## Thinking 思考档位
 
-对接 DeepSeek Anthropic 端点的 Thinking Mode：请求携带 `"reasoning": {"effort": "<档位>"}`，模型的思考内容以**暗色（ANSI dim）**流式打印在正文之前，与正文之间以空行分隔。思考内容只做展示，**不进入会话历史**。
+对接 DeepSeek Anthropic 端点的 Thinking Mode：`low/high/max` 档请求携带 `"reasoning": {"effort": "<档位>"}`，`none` 档携带 `"thinking": {"type": "disabled"}`（见下文实测注）。模型的思考内容以**暗色（ANSI dim）**流式打印在正文之前，与正文之间以空行分隔。思考内容只做展示，**不进入会话历史**。
 
 四档（不多不少）：
 
@@ -91,7 +91,7 @@ xharness --version          # 打印版本
 注意事项：
 
 - **v4-pro 映射现状**：按 DeepSeek 官方文档，`deepseek-v4-pro` 当前会把 `low` 映射为 `high`（即 pro 上 low 与 high 行为一致）；`deepseek-v4-flash` 四档均有效。
-- **实测现状（2026-08-01）**：直连端点探测发现 `reasoning.effort` 疑似被端点忽略——`none` 档下 flash/pro 仍会输出思考内容，非法档位值也被静默接受。xharness 仍按文档携带该参数，端点侧行为以 DeepSeek 上游为准。
+- **实现与实测现状（2026-08-01）**：`none` 档经 Anthropic 官方参数 `thinking: {"type": "disabled"}` 实现（实测可真正关闭思考，不再携带 `reasoning`）；`low/high/max` 按 DeepSeek 官方文档透传 `reasoning.effort`，实测各档思考量差异不显著，端点侧行为以 DeepSeek 上游为准。
 - **计费提示**：思考内容同样计入输出 token 计费，`max` 档思考 token 消耗显著增加；对简单任务可用 `none`/`low` 降低延迟与成本。
 - `budget_tokens`（Anthropic 官方 thinking 参数）被 DeepSeek 端点忽略，xharness 不实现。
 

@@ -100,21 +100,44 @@ describe("api client", () => {
     expect(calls).toBe(1);
   });
 
-  it("effort 有值时请求体带 reasoning.effort，未设置时不带 reasoning 字段", async () => {
+  it("effort none → 只传 thinking:{type:\"disabled\"}，不传 reasoning（Judge T7 裁决 b）", async () => {
     const captured: StreamRequestParams[] = [];
     const client = createApiClientFromStreamFn(async (params) => {
       captured.push(params);
       return toStream(textAndToolEvents);
     }, []);
 
-    await client.streamMessage({ ...baseOptions(() => {}), effort: "low" });
-    expect(captured[0].reasoning).toEqual({ effort: "low" });
-
     await client.streamMessage({ ...baseOptions(() => {}), effort: "none" });
-    expect(captured[1].reasoning).toEqual({ effort: "none" });
+    expect(captured[0].thinking).toEqual({ type: "disabled" });
+    expect(captured[0]).not.toHaveProperty("reasoning");
+  });
+
+  it("effort low/high/max → 只传 reasoning.effort，不传 thinking", async () => {
+    const captured: StreamRequestParams[] = [];
+    const client = createApiClientFromStreamFn(async (params) => {
+      captured.push(params);
+      return toStream(textAndToolEvents);
+    }, []);
+
+    for (const level of ["low", "high", "max"] as const) {
+      await client.streamMessage({ ...baseOptions(() => {}), effort: level });
+    }
+    for (const [i, level] of (["low", "high", "max"] as const).entries()) {
+      expect(captured[i].reasoning).toEqual({ effort: level });
+      expect(captured[i]).not.toHaveProperty("thinking");
+    }
+  });
+
+  it("effort 未设置 → reasoning 与 thinking 皆不携带", async () => {
+    const captured: StreamRequestParams[] = [];
+    const client = createApiClientFromStreamFn(async (params) => {
+      captured.push(params);
+      return toStream(textAndToolEvents);
+    }, []);
 
     await client.streamMessage(baseOptions(() => {}));
-    expect(captured[2]).not.toHaveProperty("reasoning");
+    expect(captured[0]).not.toHaveProperty("reasoning");
+    expect(captured[0]).not.toHaveProperty("thinking");
   });
 
   it("thinking_delta 事件即时发出，thinking 内容不进返回 content", async () => {

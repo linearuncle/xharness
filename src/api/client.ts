@@ -73,8 +73,10 @@ export interface StreamRequestParams {
   system: string;
   messages: Message[];
   tools: ApiToolDefinition[];
-  /** DeepSeek Anthropic 端点扩展字段（Thinking Mode）；未设置不携带 */
+  /** DeepSeek Anthropic 端点扩展字段（Thinking Mode）；仅 low/high/max 携带 */
   reasoning?: { effort: EffortLevel };
+  /** Anthropic 官方参数；effort:"none" 映射为 {type:"disabled"}（Judge T7 裁决 b） */
+  thinking?: { type: "disabled" };
 }
 
 export type StreamFn = (
@@ -180,7 +182,13 @@ export function createApiClientFromStreamFn(
         messages: opts.messages,
         tools: opts.tools,
       };
-      if (opts.effort) params.reasoning = { effort: opts.effort };
+      // Judge T7 裁决 b：none → 只传 thinking:{type:"disabled"}（实测可真正关闭思考），
+      // 不传 reasoning 以避免上游修复 effort 后的歧义；low/high/max → 透传 reasoning.effort
+      if (opts.effort === "none") {
+        params.thinking = { type: "disabled" };
+      } else if (opts.effort) {
+        params.reasoning = { effort: opts.effort };
+      }
       let attempt = 0;
       for (;;) {
         if (opts.signal?.aborted) throw new ApiError("请求已被中止");
@@ -216,6 +224,8 @@ export function createApiClient(config: Config): ApiClient {
       tools: params.tools as unknown as Anthropic.ToolUnion[],
       stream: true,
     };
+    // thinking 是 SDK 原生 ThinkingConfigParam，无需 as
+    if (params.thinking) request.thinking = params.thinking;
     if (params.reasoning) {
       // reasoning 是 DeepSeek Anthropic 端点扩展字段，SDK 类型不认识，最小范围 as 透传
       (
