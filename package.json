@@ -12,7 +12,7 @@
     "test:e2e": "vitest run --project e2e"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.57.0",

@@ -13,7 +13,7 @@
 
 | 决策项 | 结论 |
 |---|---|
-| 语言 / 运行时 | TypeScript，Node.js >= 20，ESM |
+| 语言 / 运行时 | TypeScript，Node.js >= 22（Judge 裁决升级：Glob 工具依赖 Node 22 的 fs.glob），ESM |
 | LLM 接口 | 仅 Anthropic Messages API **格式**（用 `@anthropic-ai/sdk`），流式（streaming）输出；端点与模型完全可配，不绑定 Anthropic 官方 |
 | 默认端点 | **DeepSeek Anthropic 兼容端点 `https://api.deepseek.com/anthropic`**，可用 `ANTHROPIC_BASE_URL` 环境变量覆盖为官方 Anthropic 或其他兼容端点 |
 | 默认模型 | `deepseek-v4-pro`（agentic coding 旗舰），可用 `XHARNESS_MODEL` 环境变量覆盖（如 `deepseek-v4-flash`、claude 系列）。注意旧名 `deepseek-chat`/`deepseek-reasoner` 已于 2026-07 停用，不得使用 |
