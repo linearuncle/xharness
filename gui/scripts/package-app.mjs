@@ -9,6 +9,7 @@
 import { execFileSync, execSync } from "node:child_process";
 import {
   existsSync, mkdirSync, rmSync, cpSync, writeFileSync, readFileSync,
+  realpathSync, chmodSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -74,6 +75,22 @@ rmSync(join(APP_OUT, "Contents", "Resources", "default_app.asar"), { force: true
 console.log("4/5 注入应用代码 …");
 cpSync(STAGING, join(APP_OUT, "Contents", "Resources", "app"), { recursive: true });
 rmSync(STAGING, { recursive: true, force: true });
+
+console.log("4.5/6 内置 ripgrep …");
+// rg 是 Grep 工具的硬依赖；打进 Resources/bin 让用户零依赖（ripgrep: MIT/Unlicense 双协议，可分发）
+try {
+  const rgPath = realpathSync(execSync("command -v rg", { encoding: "utf8" }).trim());
+  const binDir = join(APP_OUT, "Contents", "Resources", "bin");
+  mkdirSync(binDir, { recursive: true });
+  cpSync(rgPath, join(binDir, "rg"), { dereference: true });
+  chmodSync(join(binDir, "rg"), 0o755);
+  writeFileSync(
+    join(binDir, "NOTICE-ripgrep.txt"),
+    "Bundled ripgrep (rg) is dual-licensed under MIT / Unlicense.\nhttps://github.com/BurntSushi/ripgrep\n"
+  );
+} catch {
+  console.warn("警告：本机未找到 rg，产物将依赖用户自装 ripgrep");
+}
 
 console.log("5/6 ad-hoc 签名 …");
 execFileSync("codesign", ["--force", "--deep", "--sign", "-", APP_OUT], { stdio: "ignore" });

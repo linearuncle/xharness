@@ -16,6 +16,15 @@ let win = null;
 
 app.setName("xharness");
 
+// Finder 启动的 GUI 不继承 shell PATH：优先用打包内置的 bin（含 rg），
+// 再兜底补上 Homebrew 常见路径，最后才是系统默认 PATH
+process.env.PATH = [
+  join(process.resourcesPath ?? "", "bin"),
+  "/opt/homebrew/bin",
+  "/usr/local/bin",
+  process.env.PATH ?? "",
+].filter(Boolean).join(":");
+
 marked.setOptions({ breaks: true });
 
 function escapeHtml(s) {
