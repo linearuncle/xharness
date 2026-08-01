@@ -14,10 +14,10 @@
 | 决策项 | 结论 |
 |---|---|
 | 语言 / 运行时 | TypeScript，Node.js >= 20，ESM |
-| LLM 接口 | 仅 Anthropic Messages API（官方 `@anthropic-ai/sdk`），流式（streaming）输出 |
-| 默认模型 | `claude-sonnet-5`，可用 `XHARNESS_MODEL` 环境变量覆盖 |
-| API 端点 | 默认官方端点，可用 `ANTHROPIC_BASE_URL` 环境变量指向任意 Anthropic 兼容端点（如 DeepSeek）——测试依赖此能力，必须实现 |
-| API Key | 读 `ANTHROPIC_API_KEY` 环境变量，缺失时启动报错并提示 |
+| LLM 接口 | 仅 Anthropic Messages API **格式**（用 `@anthropic-ai/sdk`），流式（streaming）输出；端点与模型完全可配，不绑定 Anthropic 官方 |
+| 默认端点 | **DeepSeek Anthropic 兼容端点 `https://api.deepseek.com/anthropic`**，可用 `ANTHROPIC_BASE_URL` 环境变量覆盖为官方 Anthropic 或其他兼容端点 |
+| 默认模型 | `deepseek-chat`，可用 `XHARNESS_MODEL` 环境变量覆盖（如 flash 类轻量模型、claude 系列） |
+| API Key | 读 `ANTHROPIC_API_KEY` 环境变量（填 DeepSeek key 即可），缺失时启动报错并提示 |
 | 权限模式 | 仅 YOLO：所有工具直接执行，无确认弹窗、无权限系统 |
 | CLI 形态 | 终端 REPL 交互（stdin/stdout），入口命令 `xharness`，无 TUI 框架依赖（不用 ink/blessed，用 ANSI 转义即可） |
 | 内容搜索 | Grep 工具封装 ripgrep（`rg`），若系统无 `rg` 则回退到纯 JS 实现 |
@@ -152,13 +152,12 @@ npm test             # vitest 单测（一律 mock API，不发真实请求）
 
 ### 6.2 大量端到端 / 集成测试（用 DeepSeek Anthropic 兼容端点）
 
-真实 LLM 参与的测试统一走 DeepSeek 的 Anthropic 兼容端点 + 轻量 flash 类模型，
+真实 LLM 参与的测试统一走 DeepSeek 端点（即默认端点，无需覆盖）+ 轻量 flash 类模型，
 成本低、可大量跑，用于 T2 之后每个 tranche 的出口验证与回归：
 
 ```bash
-export ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic
 export ANTHROPIC_API_KEY=$DEEPSEEK_API_KEY
-export XHARNESS_MODEL=<flash 轻量模型>   # 具体模型名由用户提供，写入 .env.test，不硬编码
+export XHARNESS_MODEL=<flash 轻量模型>   # 具体模型名写入 .env.test，不硬编码；默认 deepseek-chat
 npm run test:e2e
 ```
 
@@ -166,8 +165,8 @@ npm run test:e2e
   Edit 修改函数后跑测试、触发 compact、技能调用等），断言最终产物与工具调用序列。
 - 每个用例在**独立临时工作目录**（fixture 沙箱）中运行，绝不在 xharness 仓库本身或
   用户目录里跑；用例结束清理临时目录（由测试框架清理，不由被测模型执行）。
-- 官方 Anthropic 端点 + 真实 Claude 模型仅在 T2/T3 出口各做一次冒烟，以及第 8 节
-  最终完成演示时使用，控制成本。
+- 出口冒烟与第 8 节最终演示同样默认用 DeepSeek 端点；官方 Anthropic 端点 + Claude
+  模型仅作为一次性的兼容性验证（确认 `ANTHROPIC_BASE_URL` 覆盖机制可用），可选。
 
 ### 6.3 测试安全红线（破坏性防护）
 
