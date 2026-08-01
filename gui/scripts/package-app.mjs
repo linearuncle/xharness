@@ -75,8 +75,15 @@ console.log("4/5 注入应用代码 …");
 cpSync(STAGING, join(APP_OUT, "Contents", "Resources", "app"), { recursive: true });
 rmSync(STAGING, { recursive: true, force: true });
 
-console.log("5/5 ad-hoc 签名 …");
+console.log("5/6 ad-hoc 签名 …");
 execFileSync("codesign", ["--force", "--deep", "--sign", "-", APP_OUT], { stdio: "ignore" });
 
+console.log("6/6 压缩分发包 …");
+// ditto -c -k 保留符号链接与签名（普通 zip 会解引用框架 symlink 破坏签名）
+const arch = process.arch === "arm64" ? "arm64" : process.arch;
+const ZIP_OUT = join(RELEASE, `xharness-mac-${arch}.zip`);
+execFileSync("ditto", ["-c", "-k", "--keepParent", APP_OUT, ZIP_OUT]);
+
 console.log(`完成：${APP_OUT}`);
+console.log(`分发包：${ZIP_OUT}`);
 console.log("安装：拖入 /Applications；首次打开若被 Gatekeeper 拦截，右键 → 打开。");

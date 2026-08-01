@@ -65,7 +65,7 @@ cd gui && npm install      # postinstall 会自动改名 Electron 骨架
 node scripts/package-app.mjs
 ```
 
-产物：`<仓库根>/release/xharness.app`（自包含，约 260MB），拖入 /Applications 即可；
+产物：`release/xharness.app`（自包含，约 260MB）与分发包 `release/xharness-mac-<arch>.zip`（约 104MB，ditto 打包保留签名）。安装：解压后拖入 /Applications；
 ad-hoc 签名，首次打开若被 Gatekeeper 拦截，右键 → 打开。
 
 注意：**Finder 启动的应用不继承 shell 环境变量**，打包版请在设置中"手动填写"
