@@ -1,8 +1,8 @@
 import { app, BrowserWindow, ipcMain, dialog, nativeImage } from "electron";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { userInfo } from "node:os";
+import { userInfo, homedir } from "node:os";
 import { marked } from "marked";
 import * as store from "./store.js";
 import * as engine from "./engine.js";
@@ -147,6 +147,17 @@ ipcMain.handle("chat:stop", (_e, id) => engine.stop(id));
 
 ipcMain.handle("block:append", (_e, { id, block }) => store.appendBlock(id, block));
 
+// 剪贴板粘贴的图片：落盘到 ~/.xharness/gui/attachments/ 后按普通附件路径处理
+ipcMain.handle("attach:save-clipboard", (_e, { base64, ext }) => {
+  const safeExt = ["png", "jpg", "jpeg", "webp", "gif"].includes(ext) ? ext : "png";
+  const dir = join(homedir(), ".xharness", "gui", "attachments");
+  mkdirSync(dir, { recursive: true });
+  const name = `paste-${Date.now()}.${safeExt}`;
+  const path = join(dir, name);
+  writeFileSync(path, Buffer.from(base64, "base64"));
+  return { path, name };
+});
+
 ipcMain.handle("attach:pick", async () => {
   const r = await dialog.showOpenDialog(win, {
     properties: ["openFile", "multiSelections"],
@@ -172,10 +183,10 @@ function loadAttachments(paths) {
       const media = IMAGE_MEDIA[ext];
       const data = readFileSync(p);
       if (media) {
-        out.push({ kind: "image", name: p.split("/").pop(), mediaType: media, base64: data.toString("base64") });
+        out.push({ kind: "image", path: p, name: p.split("/").pop(), mediaType: media, base64: data.toString("base64") });
       } else {
         // 非图片附件：以文本形式注入（截断保护）
-        out.push({ kind: "text", name: p.split("/").pop(), text: data.toString("utf8").slice(0, 30000) });
+        out.push({ kind: "text", path: p, name: p.split("/").pop(), text: data.toString("utf8").slice(0, 30000) });
       }
     } catch (err) {
       out.push({ kind: "error", name: p, text: err.message });
@@ -192,7 +203,7 @@ ipcMain.handle("chat:send", async (_e, { id, text, attachmentPaths }) => {
   }
   const attachments = loadAttachments(attachmentPaths);
   for (const a of attachments) {
-    store.appendBlock(id, { kind: "attachment", name: a.name, type: a.kind });
+    store.appendBlock(id, { kind: "attachment", name: a.name, type: a.kind, path: a.path });
   }
   store.appendBlock(id, { kind: "user", text });
   const emit = (event) => {

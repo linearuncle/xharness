@@ -22,6 +22,8 @@ contextBridge.exposeInMainWorld("api", {
   send: (id, text, attachmentPaths) =>
     ipcRenderer.invoke("chat:send", { id, text, attachmentPaths }),
   pickAttachments: () => ipcRenderer.invoke("attach:pick"),
+  savePastedImage: (base64, ext) =>
+    ipcRenderer.invoke("attach:save-clipboard", { base64, ext }),
   stop: (id) => ipcRenderer.invoke("chat:stop", id),
   answer: (id, text) => ipcRenderer.invoke("chat:answer", { id, text }),
   appendBlock: (id, block) => ipcRenderer.invoke("block:append", { id, block }),

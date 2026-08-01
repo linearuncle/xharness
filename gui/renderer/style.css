@@ -408,3 +408,25 @@ body.settings-open .sb-titlebar {
 .attach-chip .x { cursor: pointer; color: var(--text-3); }
 .attach-chip .x:hover { color: var(--text); }
 .attach-note { color: var(--text-3); font-size: 12.5px; }
+
+/* 粘贴/选择的图片附件：大缩略图卡（对齐设计图） */
+.attach-thumb {
+  position: relative; display: inline-block;
+  border: 1px solid var(--card-border); border-radius: 12px; overflow: visible;
+}
+.attach-thumb img {
+  width: 132px; height: 132px; object-fit: cover; border-radius: 12px; display: block;
+}
+.attach-thumb .x {
+  position: absolute; top: -8px; right: -8px;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: #1a1a1a; color: #fff; font-size: 11px;
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,.25);
+}
+
+/* 聊天流中的图片消息 */
+.msg-user .chat-img {
+  max-width: 260px; max-height: 300px; border-radius: 12px;
+  border: 1px solid var(--card-border);
+}

@@ -168,7 +168,11 @@ function renderStoredBlock(list, b) {
   } else if (b.kind === "notice") {
     list.appendChild(el(`<div class="notice">${esc(b.text)}</div>`));
   } else if (b.kind === "attachment") {
-    list.appendChild(el(`<div class="msg-user"><div class="bubble">📎 ${esc(b.name)}</div></div>`));
+    if (b.type === "image" && b.path) {
+      list.appendChild(el(`<div class="msg-user"><img class="chat-img" src="file://${esc(b.path)}" alt="${esc(b.name)}" /></div>`));
+    } else {
+      list.appendChild(el(`<div class="msg-user"><div class="bubble">📎 ${esc(b.name)}</div></div>`));
+    }
   } else if (b.kind === "ask") {
     const d = el(
       `<div class="ask-block answered"><div class="ask-q">${esc(b.question)}</div><div class="notice">${esc(b.answer ?? "")}</div></div>`
@@ -208,7 +212,11 @@ async function sendCurrent() {
 
   const list = $("chat-list");
   for (const a of S.attachments) {
-    list.appendChild(el(`<div class="msg-user"><div class="bubble">📎 ${esc(a.name)}</div></div>`));
+    if (a.isImage) {
+      list.appendChild(el(`<div class="msg-user"><img class="chat-img" src="file://${esc(a.path)}" alt="${esc(a.name)}" /></div>`));
+    } else {
+      list.appendChild(el(`<div class="msg-user"><div class="bubble">📎 ${esc(a.name)}</div></div>`));
+    }
   }
   list.appendChild(el(`<div class="msg-user"><div class="bubble">${esc(text)}</div></div>`));
   beginTurn(list);
@@ -681,6 +689,25 @@ async function boot() {
   });
 
   const input = $("input");
+  // 粘贴图片：截图后 Cmd+V 直接变成附件缩略图
+  input.addEventListener("paste", async (e) => {
+    const items = [...(e.clipboardData?.items ?? [])].filter((it) => it.type.startsWith("image/"));
+    if (!items.length) return;
+    e.preventDefault();
+    for (const it of items) {
+      const file = it.getAsFile();
+      if (!file) continue;
+      const ext = (it.type.split("/")[1] || "png").replace("jpeg", "jpg");
+      const base64 = await new Promise((resolve) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(String(fr.result).split(",")[1]);
+        fr.readAsDataURL(file);
+      });
+      const saved = await api.savePastedImage(base64, ext);
+      S.attachments.push({ ...saved, isImage: true });
+    }
+    renderAttachChips();
+  });
   input.addEventListener("input", () => { autosize(); updatePopup(); });
   input.addEventListener("keydown", (e) => {
     const popupOpen = !$("popup").classList.contains("hidden");
@@ -989,9 +1016,12 @@ function renderAttachChips() {
   if (!S.attachments.length) { box.classList.add("hidden"); return; }
   box.classList.remove("hidden");
   for (const a of S.attachments) {
-    const chip = el(`<span class="attach-chip">${
-      a.isImage ? `<img src="file://${esc(a.path)}" alt="" />` : "📄"
-    }<span>${esc(a.name)}</span><span class="x" title="移除">✕</span></span>`);
+    let chip;
+    if (a.isImage) {
+      chip = el(`<span class="attach-thumb"><img src="file://${esc(a.path)}" alt="${esc(a.name)}" /><span class="x" title="移除">✕</span></span>`);
+    } else {
+      chip = el(`<span class="attach-chip">📄<span>${esc(a.name)}</span><span class="x" title="移除">✕</span></span>`);
+    }
     chip.querySelector(".x").onclick = () => {
       S.attachments = S.attachments.filter((x) => x !== a);
       renderAttachChips();
