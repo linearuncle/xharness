@@ -22,6 +22,7 @@
   --link: #0969da;
   --shadow: rgba(0, 0, 0, .1);
   --accent-orange: #e8590c;
+  --accent-red: #e03131;
   --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", sans-serif;
   --font-code: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   --sb-bg-translucent: rgba(247, 247, 245, .6);
@@ -341,6 +342,13 @@ body {
 #input::placeholder { color: var(--text-3); }
 #composer-bar { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
 #yolo-badge { color: var(--accent-orange); font-size: 13px; cursor: default; }
+#debug-badge {
+  color: var(--accent-red); font-size: 12px; font-weight: 700;
+  font-family: ui-monospace, monospace;
+  border: 1px solid color-mix(in srgb, var(--accent-red) 55%, transparent);
+  background: color-mix(in srgb, var(--accent-red) 12%, transparent);
+  border-radius: 4px; padding: 1px 6px; cursor: default;
+}
 #model-label { color: var(--text-2); font-size: 13px; cursor: pointer; padding: 3px 8px; border-radius: 7px; }
 #model-label:hover { background: var(--hover); }
 #btn-send {
@@ -685,21 +693,6 @@ body.settings-open #app { visibility: hidden; }
   max-width: 260px; max-height: 300px; border-radius: 12px;
   border: 1px solid var(--card-border);
 }
-
-/* 首启 YOLO 确认 */
-#yolo-modal {
-  position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,.35);
-  display: flex; align-items: center; justify-content: center;
-}
-.ym-card {
-  background: var(--panel); border-radius: 16px; width: 460px; padding: 24px 26px;
-  box-shadow: 0 24px 70px rgba(0,0,0,.25);
-}
-.ym-title { font-size: 17px; font-weight: 700; color: var(--accent-orange); margin-bottom: 10px; }
-.ym-card p { font-size: 13.5px; line-height: 1.7; color: var(--text-2); }
-.ym-check { display: flex; align-items: center; gap: 8px; margin: 16px 0; font-size: 13.5px; cursor: pointer; }
-.ym-card .btn { width: 100%; padding: 10px; }
-.ym-card .btn:disabled { opacity: .4; cursor: default; }
 
 /* ---------- 设置 → 外观 ---------- */
 .ap-section-label { font-size: 13.5px; color: var(--text-2); margin: 6px 0 12px; }
