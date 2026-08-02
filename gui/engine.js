@@ -36,10 +36,7 @@ export const EFFORTS = [
 ];
 
 function enabledProviders() {
-  // 启用 + 已填 API Key + 有模型，才算可选供应商
-  return store.getProviders().filter(
-    (p) => p.enabled && p.models?.length && !!store.getProviderKey(p.id)
-  );
+  return store.getProviders().filter((p) => p.enabled && p.models?.length);
 }
 
 export function defaultChoice() {

@@ -23,12 +23,8 @@ function hasApiKey(p) {
   return !!(p?.hasKey || (typeof p?.apiKey === "string" && p.apiKey.trim()));
 }
 
-/** 供应商就绪状态：启用且有 key 才算真正可用 */
-function isProviderReady(p) {
-  return !!(p?.enabled && hasApiKey(p) && p.models?.length);
-}
-
-/** 设置页状态文案与样式类：已禁用 / 未配置(红) / 已启用(绿) */
+/** 设置页状态文案与样式类：已禁用 / 未配置(红) / 已启用(绿)
+ *  模型列表仍按 enabled 展示；无 key 只影响此处状态，调用失败时按错误内容提示 */
 function providerStatus(p) {
   if (!p?.enabled) return { cls: "", label: "已禁用", dot: "" };
   if (!hasApiKey(p)) return { cls: " err", label: "未配置", dot: " err" };
@@ -36,7 +32,7 @@ function providerStatus(p) {
 }
 
 function defaultChoice() {
-  const p = S.providers.find((x) => isProviderReady(x));
+  const p = S.providers.find((x) => x.enabled && x.models?.length);
   return p ? { providerId: p.id, model: p.models[0].id } : { providerId: null, model: "" };
 }
 
@@ -599,9 +595,9 @@ function renderModelOptions() {
   m.innerHTML = `<div class="mm-row" id="mm-back">‹ 模型</div><div class="mm-sub"></div>`;
   $("mm-back").onclick = renderModelMenuRoot;
   const sub = m.querySelector(".mm-sub");
-  const enabled = S.providers.filter((p) => isProviderReady(p));
+  const enabled = S.providers.filter((p) => p.enabled && p.models?.length);
   if (!enabled.length) {
-    sub.appendChild(el(`<div class="mm-group">暂无可用供应商，请到设置中填写 API Key</div>`));
+    sub.appendChild(el(`<div class="mm-group">暂无可用供应商，请到设置中配置</div>`));
     return;
   }
   for (const p of enabled) {
@@ -795,7 +791,7 @@ function closeSettings() {
   $("settings-view").classList.add("hidden");
   // 供应商可能变化，校正当前选择
   const stillValid = S.providers.some(
-    (p) => p.id === S.meta.providerId && isProviderReady(p) && p.models?.some((m) => m.id === S.meta.model)
+    (p) => p.id === S.meta.providerId && p.enabled && p.models?.some((m) => m.id === S.meta.model)
   );
   if (!stillValid) S.meta = { ...defaultChoice(), effort: S.meta.effort };
   updateModelLabel();
