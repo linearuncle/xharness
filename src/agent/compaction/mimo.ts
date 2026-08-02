@@ -291,7 +291,11 @@ async function updateCheckpoint(
 // 尾窗边界（对应 computeBoundary + adjustBoundaryForApiInvariants）
 // ============================================================================
 
-export function computeTailStart(messages: Message[]): number {
+export function computeTailStart(
+  messages: Message[],
+  tailMin: number = TAIL_MIN_TOKENS,
+  tailMax: number = TAIL_MAX_TOKENS
+): number {
   if (messages.length === 0) return 0;
   const lastAsst = messages.reduceRight(
     (found, _m, i) => (found >= 0 ? found : messages[i].role === "assistant" ? i : -1),
@@ -308,11 +312,11 @@ export function computeTailStart(messages: Message[]): number {
     if (containsText(messages[i])) textCount++;
   }
   // 天然尾窗已超上限：不前移边界（消息粒度截断会拆配对），软上限
-  if (tailSum < TAIL_MAX_TOKENS) {
+  if (tailSum < tailMax) {
     while (
       start > 0 &&
-      tailSum < TAIL_MAX_TOKENS &&
-      (tailSum < TAIL_MIN_TOKENS || textCount < TAIL_MIN_TEXT_MESSAGES)
+      tailSum < tailMax &&
+      (tailSum < tailMin || textCount < TAIL_MIN_TEXT_MESSAGES)
     ) {
       start--;
       tailSum += tokens[start];
@@ -328,7 +332,11 @@ export function computeTailStart(messages: Message[]): number {
 // 重建（对应 renderRebuildContext + insertRebuildBoundary：本地完成，零 LLM 调用）
 // ============================================================================
 
-function renderRebuildCarrier(state: MimoState, messages: Message[]): string {
+function renderRebuildCarrier(
+  state: MimoState,
+  messages: Message[],
+  recentUserCap: number = RECENT_USER_CAP
+): string {
   const lines: string[] = [];
   lines.push(
     "以下区块由会话记忆自动载入，已在你的上下文中，不要当作新输入逐条回应。"
@@ -341,7 +349,7 @@ function renderRebuildCarrier(state: MimoState, messages: Message[]): string {
   // 最近用户输入原文（FIFO，总预算 16K、单条 2K）：writer 摘要会转述丢锚点，
   // 原文保留精确的命令、标志与粘贴内容
   const entries: string[] = [];
-  let remaining = RECENT_USER_CAP;
+  let remaining = recentUserCap;
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
     if (!isRealUserMessage(msg)) continue;
@@ -371,13 +379,18 @@ function renderRebuildCarrier(state: MimoState, messages: Message[]): string {
 
 function rebuild(deps: CompactDeps, state: MimoState): void {
   const messages = deps.history.getMessages();
-  const tailStart = computeTailStart(messages);
+  // 小窗口时尾窗与原文预算按 usable 等比缩放，避免重建结果仍超 usable 反复触发
+  const usable = usableTokens(deps.config.contextWindow);
+  const tailMax = Math.min(TAIL_MAX_TOKENS, Math.floor(usable * 0.6));
+  const tailMin = Math.min(TAIL_MIN_TOKENS, Math.floor(usable * 0.3));
+  const recentUserCap = Math.min(RECENT_USER_CAP, Math.floor(usable * 0.25));
+  const tailStart = computeTailStart(messages, tailMin, tailMax);
   const carrier: Message = {
     role: "user",
     content: [
       {
         type: "text",
-        text: `${SUMMARY_PREFIX}\n${renderRebuildCarrier(state, messages)}`,
+        text: `${SUMMARY_PREFIX}\n${renderRebuildCarrier(state, messages, recentUserCap)}`,
       },
     ],
   };
