@@ -91,6 +91,12 @@ tool_use/tool_result 配对中间则**向旧侧扩窗**（宁多保留不拆对�
 - 安全基线（开源审查后确立，勿回退）：渲染层 markdown 一律过 DOMPurify；CSP 收紧；
   附件走 `xatt://` 受控协议（只按文件名从 attachments 目录取），禁止裸 `file://`；
   projectDir 类 IPC 校验必须为已添加项目。
+- 外观主题（renderer/theme.js + appearance.js）：一套主题只存强调/背景/前景三基色 +
+  对比度，其余界面色全部由 `mixColor(bg, fg, t)` 推导——**style.css 禁止再写死颜色**，
+  一律走 `:root` CSS 变量；深浅切换经 `data-theme` 与 hljs 双 link 的 disabled 互斥；
+  半透明侧栏走窗口 vibrancy（设置页打开时下层 `#app` 必须 `visibility:hidden`，
+  否则透明侧栏会透出下层内容重影）；外观持久化为 settings.jsonl 的 `appearance` 事件，
+  rewriteSettings 整文件重写时必须一并带上，否则换 key 会把外观清掉。
 - Electron 两个易踩的坑：`-webkit-app-region: drag` 区域**不受 z-index 遮挡影响**，
   会吃掉浮层点击（浮层下方不得有 drag 区）；"点击外部关闭菜单"要用 `mousedown` 判定
   （click 阶段若菜单内容已被重建，`contains()` 会误判为外部点击）。

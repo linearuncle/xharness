@@ -34,6 +34,12 @@ ANTHROPIC_API_KEY=你的key npm start
   可添加自定义供应商（名称 / Base URL / API Key / 模型列表），API 格式固定 Anthropic Messages；
   API Key **必须手动填写**（可切换明文显示，不读环境变量）；模型条目含模型 ID 与上下文窗口；
   配置持久化于 `~/Library/Application Support/xharness/settings.jsonl`（append-only，与会话数据同规范）
+- **外观设置**（设置 → 外观）：主题模式（系统/浅色/深色，系统随 macOS 深浅自动切换）；
+  浅/深两套主题独立配置——内置 13 个预设（Codex/Dracula/GitHub/Gruvbox/Catppuccin/
+  Everforest/Ayu/Nord/One/Solarized/Tokyo Night/Linear/Notion），也可自定义
+  强调色/背景/前景三基色（其余界面色由三基色+对比度自动推导）、UI 字体、代码字体、
+  半透明侧栏（macOS vibrancy）与对比度；主题 JSON 可经剪贴板导入/复制分享；
+  代码块高亮随深浅切换 hljs 主题；配置持久化于 settings.jsonl（appearance 事件）
 - **上下文条**：项目名 · 本地 · git 分支；右上"环境信息"面板显示变更文件
 - **YOLO 提示**：橙色"⚠ 完全访问"徽标——与 CLI 相同，无沙箱、工具直接执行
 

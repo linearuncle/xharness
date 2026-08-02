@@ -26,6 +26,20 @@ const SETTINGS_FILE = join(DIR, "settings.jsonl");
 let projects = []; // [{dir}]
 let conversations = {}; // id -> {projectDir,title,pinned,createdAt,blocks}
 let providers = []; // 模型供应商（settings.jsonl 重放）
+let appearance = null; // 外观设置（settings.jsonl 重放；null = 默认）
+
+// 外观默认值：浅/深两套主题独立配置，mode 决定生效哪套（system 跟随系统）
+export const DEFAULT_APPEARANCE = {
+  mode: "system", // system | light | dark
+  light: {
+    preset: "codex", accent: "#2563eb", background: "#ffffff", foreground: "#1a1a1a",
+    uiFont: "", codeFont: "", translucentSidebar: false, contrast: 50,
+  },
+  dark: {
+    preset: "codex", accent: "#339cff", background: "#181818", foreground: "#ffffff",
+    uiFont: "", codeFont: "", translucentSidebar: false, contrast: 50,
+  },
+};
 
 const DEFAULT_PROVIDER = {
   id: "deepseek",
@@ -113,8 +127,9 @@ export function load() {
     if (c) conversations[id] = c;
   }
 
-  // settings.jsonl 重放：{op:"upsert",provider} / {op:"delete",id}
+  // settings.jsonl 重放：{op:"upsert",provider} / {op:"delete",id} / {op:"appearance",appearance}
   providers = [];
+  appearance = null;
   for (const r of readLines(SETTINGS_FILE)) {
     if (r.op === "upsert" && r.provider?.id) {
       const i = providers.findIndex((p) => p.id === r.provider.id);
@@ -122,6 +137,8 @@ export function load() {
       else providers.push(r.provider);
     } else if (r.op === "delete") {
       providers = providers.filter((p) => p.id !== r.id);
+    } else if (r.op === "appearance" && r.appearance) {
+      appearance = r.appearance;
     }
   }
   if (!providers.some((p) => p.id === "deepseek")) {
@@ -140,8 +157,28 @@ function rewriteSettings() {
   for (const p of providers) {
     out += line({ op: "upsert", provider: p, ts: Date.now() });
   }
+  if (appearance) out += line({ op: "appearance", appearance, ts: Date.now() });
   writeFileSync(SETTINGS_FILE, out);
   try { chmodSync(SETTINGS_FILE, 0o600); } catch { /* noop */ }
+}
+
+// 深合并默认值：老数据缺字段时用默认补齐（不写迁移，读取时兜底）
+export function getAppearance() {
+  const a = appearance ?? {};
+  return {
+    mode: a.mode ?? DEFAULT_APPEARANCE.mode,
+    light: { ...DEFAULT_APPEARANCE.light, ...(a.light ?? {}) },
+    dark: { ...DEFAULT_APPEARANCE.dark, ...(a.dark ?? {}) },
+  };
+}
+
+export function setAppearance(a) {
+  appearance = {
+    mode: ["system", "light", "dark"].includes(a?.mode) ? a.mode : "system",
+    light: { ...DEFAULT_APPEARANCE.light, ...(a?.light ?? {}) },
+    dark: { ...DEFAULT_APPEARANCE.dark, ...(a?.dark ?? {}) },
+  };
+  appendLine(SETTINGS_FILE, { op: "appearance", appearance, ts: Date.now() });
 }
 
 // 取 key（仅主进程内部使用，不经 IPC）

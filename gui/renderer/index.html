@@ -5,7 +5,8 @@
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' xatt:; connect-src 'none'" />
   <title>xharness</title>
-  <link rel="stylesheet" href="vendor/hljs-github.min.css" />
+  <link rel="stylesheet" href="vendor/hljs-github.min.css" id="hljs-light" />
+  <link rel="stylesheet" href="vendor/hljs-github-dark.min.css" id="hljs-dark" disabled />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -52,9 +53,9 @@
         <div class="main-drag-strip"></div>
         <div class="es-icon">
           <svg width="72" height="60" viewBox="0 0 72 60" fill="none">
-            <path d="M20 12 C8 12 4 22 10 30 C2 34 6 48 16 48 L52 48 C66 48 68 34 58 30 C64 20 54 8 42 14 C38 6 26 6 20 12 Z" stroke="#111" stroke-width="3" fill="none" stroke-linejoin="round"/>
-            <path d="M27 26 L34 32 L27 38" stroke="#111" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M38 39 L48 39" stroke="#111" stroke-width="3" stroke-linecap="round"/>
+            <path d="M20 12 C8 12 4 22 10 30 C2 34 6 48 16 48 L52 48 C66 48 68 34 58 30 C64 20 54 8 42 14 C38 6 26 6 20 12 Z" stroke="currentColor" stroke-width="3" fill="none" stroke-linejoin="round"/>
+            <path d="M27 26 L34 32 L27 38" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M38 39 L48 39" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
           </svg>
         </div>
         <h1 id="es-heading">要在 <u id="es-folder">…</u> 内开发什么?</h1>
@@ -127,21 +128,25 @@
       <div class="set-titlebar"></div>
       <div class="sb-item primary" id="btn-settings-back"><span class="ic">←</span>返回工作区</div>
       <div class="sb-section">基础设置</div>
-      <div class="sb-item active"><span class="ic">▤</span>模型设置</div>
+      <div class="sb-item active" id="set-nav-models" data-page="models"><span class="ic">▤</span>模型设置</div>
+      <div class="sb-item" id="set-nav-appearance" data-page="appearance"><span class="ic">☀</span>外观</div>
     </aside>
     <main id="set-main">
-      <h1>模型设置</h1>
-      <p class="set-desc">管理模型供应商，配置后可在聊天时选择使用。API 格式固定为 Anthropic Messages。</p>
-      <div id="set-card">
-        <div id="prov-list">
-          <div class="sb-section">默认</div>
-          <div id="prov-builtin"></div>
-          <div class="sb-section">自定义供应商</div>
-          <div id="prov-custom"></div>
-          <div class="prov-row add" id="btn-add-provider">＋ 添加供应商</div>
+      <div id="set-page-models" class="set-page">
+        <h1>模型设置</h1>
+        <p class="set-desc">管理模型供应商，配置后可在聊天时选择使用。API 格式固定为 Anthropic Messages。</p>
+        <div id="set-card">
+          <div id="prov-list">
+            <div class="sb-section">默认</div>
+            <div id="prov-builtin"></div>
+            <div class="sb-section">自定义供应商</div>
+            <div id="prov-custom"></div>
+            <div class="prov-row add" id="btn-add-provider">＋ 添加供应商</div>
+          </div>
+          <div id="prov-detail"><!-- 动态渲染 --></div>
         </div>
-        <div id="prov-detail"><!-- 动态渲染 --></div>
       </div>
+      <div id="set-page-appearance" class="set-page hidden"><!-- appearance.js 动态渲染 --></div>
     </main>
   </div>
 
@@ -174,6 +179,8 @@
 
   <script src="vendor/purify.min.js"></script>
   <script src="vendor/morphdom-umd.min.js"></script>
+  <script src="theme.js"></script>
+  <script src="appearance.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

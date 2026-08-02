@@ -10,6 +10,9 @@ contextBridge.exposeInMainWorld("api", {
   setModelChoice: (id, projectDir, providerId, model) =>
     ipcRenderer.invoke("conv:setModelChoice", { id, projectDir, providerId, model }),
   getSettings: () => ipcRenderer.invoke("settings:get"),
+  getAppearance: () => ipcRenderer.invoke("appearance:get"),
+  setAppearance: (a) => ipcRenderer.invoke("appearance:set", a),
+  setVibrancy: (enabled) => ipcRenderer.invoke("appearance:vibrancy", enabled),
   getProviderKey: (id) => ipcRenderer.invoke("settings:getProviderKey", id),
   upsertProvider: (provider) => ipcRenderer.invoke("settings:upsert", provider),
   deleteProvider: (id) => ipcRenderer.invoke("settings:delete", id),

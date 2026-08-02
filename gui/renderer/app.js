@@ -13,6 +13,7 @@ const S = {
   meta: { providerId: null, model: "", effort: "" },
   settings: { activeProviderId: null, draft: null }, // 设置界面状态
   attachments: [], // [{path,name,isImage}]
+  appearance: null, // 外观设置（boot 时载入，theme.js 应用）
 };
 
 const DEFAULT_MODEL_ID = "deepseek-v4-flash";
@@ -88,12 +89,12 @@ function showConvMenu(e, c) {
   document.querySelector(".ctx-menu")?.remove();
   const m = document.createElement("div");
   m.className = "ctx-menu";
-  m.style.cssText = `position:fixed;left:${e.clientX}px;top:${e.clientY}px;z-index:99;background:#fff;border:1px solid var(--card-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:4px;font-size:13px;`;
+  m.style.cssText = `position:fixed;left:${e.clientX}px;top:${e.clientY}px;z-index:99;background:var(--panel);border:1px solid var(--card-border);border-radius:10px;box-shadow:0 8px 24px var(--shadow);padding:4px;font-size:13px;`;
   const mk = (label, fn) => {
     const it = document.createElement("div");
     it.textContent = label;
     it.style.cssText = "padding:7px 14px;border-radius:7px;cursor:pointer;";
-    it.onmouseenter = () => (it.style.background = "#f4f4f2");
+    it.onmouseenter = () => (it.style.background = "var(--hover)");
     it.onmouseleave = () => (it.style.background = "");
     it.onclick = async () => { m.remove(); await fn(); };
     m.appendChild(it);
@@ -738,6 +739,11 @@ async function boot() {
   S.efforts = st.efforts;
   S.sidebar = st.sidebar;
   S.meta = { ...defaultChoice() };
+  // 外观：启动即应用，之后跟随系统深浅变化
+  S.appearance = st.appearance;
+  Appearance.init(S.appearance, (a) => (S.appearance = a));
+  Theme.apply(S.appearance);
+  Theme.watchSystem(() => S.appearance);
   $("username").textContent = "xharness";
   $("avatar").textContent = "x";
   updateModelLabel();
@@ -837,9 +843,19 @@ boot();
 
 /* ---------------- 设置界面 ---------------- */
 
+function switchSettingsPage(page) {
+  $("set-nav-models").classList.toggle("active", page === "models");
+  $("set-nav-appearance").classList.toggle("active", page === "appearance");
+  $("set-page-models").classList.toggle("hidden", page !== "models");
+  $("set-page-appearance").classList.toggle("hidden", page !== "appearance");
+  if (page === "appearance") Appearance.render();
+}
+
 function bindSettings() {
   $("btn-settings").onclick = openSettings;
   $("btn-settings-back").onclick = closeSettings;
+  $("set-nav-models").onclick = () => switchSettingsPage("models");
+  $("set-nav-appearance").onclick = () => switchSettingsPage("appearance");
   $("btn-add-provider").onclick = () => {
     const id = `p${Date.now().toString(36)}`;
     S.settings.draft = {

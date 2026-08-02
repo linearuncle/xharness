@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, nativeImage, protocol, shell } from "electron";
+import { app, BrowserWindow, ipcMain, dialog, nativeImage, nativeTheme, protocol, shell } from "electron";
 import {
   readFileSync, writeFileSync, mkdirSync, copyFileSync, existsSync,
 } from "node:fs";
@@ -71,10 +71,19 @@ function inAttachmentsDir(p) {
 
 const appIcon = nativeImage.createFromPath(join(here, "assets", "icon.png"));
 
+// 生效外观变体（system 跟随系统深浅）——窗口底色/vibrancy 用
+function effectiveTheme() {
+  const a = store.getAppearance();
+  const variant =
+    a.mode === "system" ? (nativeTheme.shouldUseDarkColors ? "dark" : "light") : a.mode;
+  return a[variant];
+}
+
 function createWindow() {
   if (process.platform === "darwin" && !appIcon.isEmpty()) {
     app.dock.setIcon(appIcon);
   }
+  const theme = effectiveTheme();
   win = new BrowserWindow({
     icon: appIcon,
     width: 1720,
@@ -83,7 +92,11 @@ function createWindow() {
     minHeight: 640,
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 20, y: 22 },
-    backgroundColor: "#ffffff",
+    // 按已存主题上底色，避免深色主题启动时白屏闪烁；半透明侧栏需透明底让 vibrancy 透出
+    backgroundColor: theme.translucentSidebar
+      ? "#00000000"
+      : /^#[0-9a-f]{6}$/i.test(theme.background) ? theme.background : "#ffffff",
+    vibrancy: theme.translucentSidebar ? "sidebar" : undefined,
     webPreferences: {
       preload: join(here, "preload.cjs"),
       contextIsolation: true,
@@ -170,7 +183,35 @@ ipcMain.handle("state:get", () => ({
   providers: store.getProvidersSafe(),
   efforts: engine.EFFORTS,
   yoloAcked: existsSync(ACK_FILE),
+  appearance: store.getAppearance(),
 }));
+
+// ---------- 外观 ----------
+
+ipcMain.handle("appearance:get", () => store.getAppearance());
+
+ipcMain.handle("appearance:set", (_e, a) => {
+  store.setAppearance(a);
+  return store.getAppearance();
+});
+
+// 半透明侧栏：macOS vibrancy 需要窗口级配合（透明底色 + vibrancy 材质）
+ipcMain.handle("appearance:vibrancy", (_e, enabled) => {
+  if (process.platform !== "darwin" || !win) return false;
+  try {
+    if (enabled) {
+      win.setBackgroundColor("#00000000");
+      win.setVibrancy("sidebar");
+    } else {
+      win.setVibrancy(null);
+      const t = effectiveTheme();
+      win.setBackgroundColor(/^#[0-9a-f]{6}$/i.test(t.background) ? t.background : "#ffffff");
+    }
+    return true;
+  } catch {
+    return false;
+  }
+});
 
 ipcMain.handle("yolo:ack", () => {
   mkdirSync(dirname(ACK_FILE), { recursive: true });
