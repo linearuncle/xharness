@@ -127,21 +127,37 @@
       <div class="set-titlebar"></div>
       <div class="sb-item primary" id="btn-settings-back"><span class="ic">←</span>返回工作区</div>
       <div class="sb-section">基础设置</div>
-      <div class="sb-item active"><span class="ic">▤</span>模型设置</div>
+      <div class="sb-item active" id="set-nav-models"><span class="ic">▤</span>模型设置</div>
+      <div class="sb-item" id="set-nav-plugins"><span class="ic">🧩</span>插件</div>
     </aside>
     <main id="set-main">
-      <h1>模型设置</h1>
-      <p class="set-desc">管理模型供应商，配置后可在聊天时选择使用。API 格式固定为 Anthropic Messages。</p>
-      <div id="set-card">
-        <div id="prov-list">
-          <div class="sb-section">默认</div>
-          <div id="prov-builtin"></div>
-          <div class="sb-section">自定义供应商</div>
-          <div id="prov-custom"></div>
-          <div class="prov-row add" id="btn-add-provider">＋ 添加供应商</div>
+      <section id="set-page-models">
+        <h1>模型设置</h1>
+        <p class="set-desc">管理模型供应商，配置后可在聊天时选择使用。API 格式固定为 Anthropic Messages。</p>
+        <div id="set-card">
+          <div id="prov-list">
+            <div class="sb-section">默认</div>
+            <div id="prov-builtin"></div>
+            <div class="sb-section">自定义供应商</div>
+            <div id="prov-custom"></div>
+            <div class="prov-row add" id="btn-add-provider">＋ 添加供应商</div>
+          </div>
+          <div id="prov-detail"><!-- 动态渲染 --></div>
         </div>
-        <div id="prov-detail"><!-- 动态渲染 --></div>
-      </div>
+      </section>
+      <section id="set-page-plugins" class="hidden">
+        <h1>插件</h1>
+        <p class="set-desc">插件在工具执行前介入（preToolUse hook），安装于 ~/.agents/plugins；项目内 .agents/plugins 会覆盖同名插件，仅运行时生效。</p>
+        <div id="plugin-card">
+          <div id="plugin-list">
+            <div class="sb-section">已安装</div>
+            <div id="plugin-rows"></div>
+            <div class="prov-row add" id="btn-add-plugin-github">＋ 从 GitHub 安装</div>
+            <div class="prov-row add" id="btn-add-plugin-local">＋ 从本地目录安装</div>
+          </div>
+          <div id="plugin-detail"><!-- 动态渲染 --></div>
+        </div>
+      </section>
     </main>
   </div>
 
@@ -156,6 +172,20 @@
       <div class="md-actions">
         <button class="btn" id="md-cancel">取消</button>
         <button class="btn primary" id="md-save">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 从 GitHub 安装插件弹窗 -->
+  <div id="plugin-backdrop" class="hidden">
+    <div id="plugin-dialog">
+      <div class="md-title">从 GitHub 安装插件 <span class="icon-btn" id="pg-close">✕</span></div>
+      <label>仓库地址</label>
+      <input id="pg-url" placeholder="owner/repo 或 https://github.com/owner/repo" />
+      <div class="md-actions">
+        <span class="env-hint" id="pg-msg"></span>
+        <button class="btn" id="pg-cancel">取消</button>
+        <button class="btn primary" id="pg-install">安装</button>
       </div>
     </div>
   </div>

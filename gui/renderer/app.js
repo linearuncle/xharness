@@ -12,6 +12,8 @@ const S = {
   turn: null, // 当前流式回合的渲染状态
   meta: { providerId: null, model: "", effort: "" },
   settings: { activeProviderId: null, draft: null }, // 设置界面状态
+  plugins: [], // 设置-插件页列表（主进程纯数据视图）
+  activePluginRoot: null,
   attachments: [], // [{path,name,isImage}]
 };
 
@@ -852,6 +854,20 @@ function bindSettings() {
   };
   $("md-close").onclick = closeModelDialog;
   $("md-cancel").onclick = closeModelDialog;
+  $("set-nav-models").onclick = () => switchSetPage("models");
+  $("set-nav-plugins").onclick = () => switchSetPage("plugins");
+  $("btn-add-plugin-github").onclick = openPluginDialog;
+  $("btn-add-plugin-local").onclick = installPluginLocal;
+  $("pg-close").onclick = closePluginDialog;
+  $("pg-cancel").onclick = closePluginDialog;
+}
+
+function switchSetPage(page) {
+  $("set-nav-models").classList.toggle("active", page === "models");
+  $("set-nav-plugins").classList.toggle("active", page === "plugins");
+  $("set-page-models").classList.toggle("hidden", page !== "models");
+  $("set-page-plugins").classList.toggle("hidden", page !== "plugins");
+  if (page === "plugins") refreshPlugins();
 }
 
 function openSettings() {
@@ -859,6 +875,7 @@ function openSettings() {
   S.settings.draft = null;
   document.body.classList.add("settings-open");
   $("settings-view").classList.remove("hidden");
+  switchSetPage("models");
   renderProviderList();
   renderProviderDetail();
 }
@@ -1057,6 +1074,138 @@ function openModelDialog(onSave) {
 function closeModelDialog() {
   $("modal-backdrop").classList.add("hidden");
   modelDialogSave = null;
+}
+
+/* ---------------- 设置-插件管理 ---------------- */
+
+async function refreshPlugins(list) {
+  S.plugins = list ?? (await api.listPlugins());
+  if (!S.plugins.some((p) => p.root === S.activePluginRoot))
+    S.activePluginRoot = S.plugins[0]?.root ?? null;
+  renderPluginList();
+  await renderPluginDetail();
+}
+
+function renderPluginList() {
+  const box = $("plugin-rows");
+  box.innerHTML = "";
+  for (const p of S.plugins) {
+    const r = el(
+      `<div class="prov-row${p.root === S.activePluginRoot ? " active" : ""}">🧩 <span>${esc(p.name)}</span><span class="dot${p.enabled ? " on" : ""}"></span></div>`
+    );
+    r.onclick = async () => {
+      S.activePluginRoot = p.root;
+      renderPluginList();
+      await renderPluginDetail();
+    };
+    box.appendChild(r);
+  }
+}
+
+async function renderPluginDetail(errorMsg) {
+  const box = $("plugin-detail");
+  const p = S.plugins.find((x) => x.root === S.activePluginRoot);
+  if (!p) {
+    box.innerHTML = `<div class="notice">${errorMsg ? esc(errorMsg) : "暂无插件，可从 GitHub 或本地目录安装"}</div>`;
+    return;
+  }
+  const renderForRoot = p.root;
+  box.innerHTML = "";
+
+  const header = el(`<div class="pd-header">
+      <span class="pd-name">${esc(p.name)}</span>
+      <span class="pd-static-dim">v${esc(p.version)}</span>
+      <span class="pd-badge${p.enabled ? " on" : ""}" id="plug-toggle">${p.enabled ? "已启用" : "已禁用"}</span>
+      <span class="icon-btn pd-del" id="plug-del" title="删除">🗑</span>
+    </div>`);
+  box.appendChild(header);
+
+  const msgEl = el(`<div class="env-hint" id="plugin-msg">${errorMsg ? esc(errorMsg) : ""}</div>`);
+  box.appendChild(msgEl);
+  const msg = (t) => (msgEl.textContent = t);
+
+  header.querySelector("#plug-toggle").onclick = async () => {
+    const r = await api.setPluginEnabled(p.root, !p.enabled);
+    if (r.ok) await refreshPlugins(r.plugins);
+    else msg(r.error);
+  };
+  // 删除两步确认：首击进入待确认态，再击执行
+  const delBtn = header.querySelector("#plug-del");
+  let armed = false;
+  delBtn.onclick = async () => {
+    if (!armed) {
+      armed = true;
+      delBtn.textContent = "确认删除?";
+      return;
+    }
+    const r = await api.removePlugin(p.root);
+    if (r.ok) await refreshPlugins(r.plugins);
+    else msg(r.error);
+  };
+
+  if (p.description)
+    box.appendChild(el(`<div class="pd-static">${esc(p.description)}</div>`));
+  box.appendChild(el(`<label>位置</label>`));
+  box.appendChild(el(`<div class="pd-static">${esc(p.root)}</div>`));
+  box.appendChild(el(`<label>Hooks</label>`));
+  box.appendChild(el(`<div class="pd-static">preToolUse × ${p.hookCount}</div>`));
+
+  // 清单编辑（改）：直接编辑 plugin.json，保存前主进程校验 JSON
+  box.appendChild(el(`<label>plugin.json</label>`));
+  const ta = el(`<textarea spellcheck="false"></textarea>`);
+  box.appendChild(ta);
+  const saveRow = el(
+    `<div class="pd-save-row"><button class="btn primary">保存清单</button></div>`
+  );
+  box.appendChild(saveRow);
+  saveRow.querySelector("button").onclick = async () => {
+    const r = await api.savePluginManifest(p.root, ta.value);
+    if (r.ok) {
+      await refreshPlugins(r.plugins);
+      msg("已保存 ✓");
+    } else msg(`保存失败：${r.error}`);
+  };
+
+  const m = await api.getPluginManifest(p.root);
+  if (S.activePluginRoot !== renderForRoot) return; // 切换期间的竞态：丢弃
+  ta.value = m.ok ? m.text : `// 读取失败：${m.error}`;
+}
+
+function openPluginDialog() {
+  $("pg-url").value = "";
+  $("pg-msg").textContent = "";
+  $("plugin-backdrop").classList.remove("hidden");
+  $("pg-url").focus();
+  $("pg-install").onclick = async () => {
+    const url = $("pg-url").value.trim();
+    if (!url) return;
+    $("pg-msg").textContent = "安装中…";
+    $("pg-install").disabled = true;
+    const r = await api.installPluginFromGitHub(url);
+    $("pg-install").disabled = false;
+    if (!r.ok) {
+      $("pg-msg").textContent = r.error;
+      return;
+    }
+    closePluginDialog();
+    S.activePluginRoot = r.plugins.find((x) => x.name === r.name)?.root ?? null;
+    await refreshPlugins(r.plugins);
+  };
+}
+
+function closePluginDialog() {
+  $("plugin-backdrop").classList.add("hidden");
+}
+
+async function installPluginLocal() {
+  const r = await api.installPluginFromLocal();
+  if (r.canceled) return;
+  if (!r.ok) {
+    await renderPluginDetail(`安装失败：${r.error}`);
+    return;
+  }
+  S.activePluginRoot = r.plugins.find((x) => x.name === r.name)?.root ?? null;
+  await refreshPlugins(r.plugins);
 }
 
 /* ---------------- + 插入菜单与附件 ---------------- */

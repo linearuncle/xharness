@@ -20,6 +20,10 @@ import { createAskUserQuestionTool } from "./tools/askUserQuestion.js";
 import { createTodoWriteTool, type TodoStore } from "./tools/todoWrite.js";
 import { createSkillTool } from "./tools/skill.js";
 import { loadSkills, type Skill } from "./skills/loader.js";
+import { loadPlugins } from "./plugins/loader.js";
+import { createPreToolUseHook } from "./plugins/hooks.js";
+import { ensureDefaultPlugins } from "./plugins/install.js";
+import type { PreToolUseHook } from "./types/hooks.js";
 import {
   buildEffortStatusText,
   buildHelpText,
@@ -43,6 +47,7 @@ interface Session {
   renderer: Renderer;
   todoStore: TodoStore;
   skills: Skill[];
+  preToolUse: PreToolUseHook;
 }
 
 function createSession(onTodosUpdate: (store: TodoStore) => void): Session {
@@ -67,7 +72,11 @@ function createSession(onTodosUpdate: (store: TodoStore) => void): Session {
   if (skills.length > 0) {
     registry.register(createSkillTool(skills));
   }
-  return { config, registry, client, system, renderer, todoStore, skills };
+  // 内置插件首启种子安装（用户删除后不复装），随后装载全局+项目插件的 hooks
+  const here = dirname(fileURLToPath(import.meta.url));
+  ensureDefaultPlugins({ bundledRoot: join(here, "..", "plugins") });
+  const preToolUse = createPreToolUseHook(loadPlugins({ cwd: process.cwd() }));
+  return { config, registry, client, system, renderer, todoStore, skills, preToolUse };
 }
 
 async function runPrompt(userInput: string): Promise<void> {
@@ -80,6 +89,7 @@ async function runPrompt(userInput: string): Promise<void> {
     client: session.client,
     config: session.config,
     system: session.system,
+    preToolUse: session.preToolUse,
     onEvent: session.renderer.onEvent,
   });
 }
@@ -158,6 +168,7 @@ async function runRepl(): Promise<void> {
         config: session.config,
         system: session.system,
         signal,
+        preToolUse: session.preToolUse,
         onEvent: session.renderer.onEvent,
       });
     },

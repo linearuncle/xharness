@@ -1,7 +1,8 @@
 // 引擎层：把 xharness（../dist）包装成 GUI 会话。
 // 每个会话持有独立的 History/Registry/Config（模型与推理强度可覆盖）。
 import { spawnSync } from "node:child_process";
-import { basename } from "node:path";
+import { basename, dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import * as store from "./store.js";
 import { createApiClient } from "../dist/api/client.js";
 import { createDefaultRegistry } from "../dist/tools/registry.js";
@@ -17,6 +18,11 @@ import { loadSkills } from "../dist/skills/loader.js";
 import { createSkillTool } from "../dist/tools/skill.js";
 import { createTodoWriteTool } from "../dist/tools/todoWrite.js";
 import { dispatchSlash } from "../dist/ui/slashCommands.js";
+import { loadPlugins } from "../dist/plugins/loader.js";
+import { createPreToolUseHook } from "../dist/plugins/hooks.js";
+import { ensureDefaultPlugins } from "../dist/plugins/install.js";
+
+const here = dirname(fileURLToPath(import.meta.url));
 
 export function initEngine() {
   const r = spawnSync("rg", ["--version"], { stdio: "ignore" });
@@ -25,6 +31,8 @@ export function initEngine() {
       "xharness 依赖 ripgrep (rg)，但未在 PATH 中找到。请先安装：brew install ripgrep"
     );
   }
+  // 内置插件首启种子安装（dev 与打包版布局一致：../plugins）；失败仅警告不阻断
+  ensureDefaultPlugins({ bundledRoot: join(here, "..", "plugins") });
 }
 
 /** 安装/新会话默认：flash + 高推理；用户改过的会话内选择优先（见 setModelChoice / setEffort） */
@@ -368,6 +376,13 @@ export async function send(convId, projectDir, text, savedBlocks, emit, attachme
       emit({ type: "notice", text: `[压缩警告] ${r.warning}` });
     }
     pushAttachments(s.history, attachments);
+    // 每回合重新装载插件：设置页的增删改/启停即时生效，无需重启会话
+    const preToolUse = createPreToolUseHook(
+      loadPlugins({
+        cwd: projectDir,
+        warn: (m) => emit({ type: "notice", text: m }),
+      })
+    );
     await runTurn({
       userInput: turnInput,
       history: s.history,
@@ -376,6 +391,7 @@ export async function send(convId, projectDir, text, savedBlocks, emit, attachme
       config: cfg,
       system: systemPrompt(s),
       signal: s.abort.signal,
+      preToolUse,
       onEvent: emit,
     });
   } catch (err) {

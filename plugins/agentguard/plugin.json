@@ -1,0 +1,17 @@
+{
+  "name": "agentguard",
+  "version": "0.4.1",
+  "description": "在执行前拦截常见的文件删除与数据库删除操作（移植自 codex-agentguard）",
+  "homepage": "https://github.com/linearuncle/codex-agentguard",
+  "license": "MIT",
+  "enabled": true,
+  "hooks": {
+    "preToolUse": [
+      {
+        "matcher": "^Bash$",
+        "command": "\"${NODE}\" \"${PLUGIN_ROOT}/hooks/block-rm.mjs\"",
+        "timeout": 10
+      }
+    ]
+  }
+}

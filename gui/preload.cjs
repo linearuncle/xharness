@@ -10,6 +10,15 @@ contextBridge.exposeInMainWorld("api", {
   setModelChoice: (id, projectDir, providerId, model) =>
     ipcRenderer.invoke("conv:setModelChoice", { id, projectDir, providerId, model }),
   getSettings: () => ipcRenderer.invoke("settings:get"),
+  listPlugins: () => ipcRenderer.invoke("plugins:list"),
+  installPluginFromGitHub: (url) => ipcRenderer.invoke("plugins:install-github", url),
+  installPluginFromLocal: () => ipcRenderer.invoke("plugins:install-local"),
+  removePlugin: (root) => ipcRenderer.invoke("plugins:remove", root),
+  setPluginEnabled: (root, enabled) =>
+    ipcRenderer.invoke("plugins:setEnabled", { root, enabled }),
+  getPluginManifest: (root) => ipcRenderer.invoke("plugins:manifest-get", root),
+  savePluginManifest: (root, text) =>
+    ipcRenderer.invoke("plugins:manifest-save", { root, text }),
   getProviderKey: (id) => ipcRenderer.invoke("settings:getProviderKey", id),
   upsertProvider: (provider) => ipcRenderer.invoke("settings:upsert", provider),
   deleteProvider: (id) => ipcRenderer.invoke("settings:delete", id),

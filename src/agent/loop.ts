@@ -8,6 +8,7 @@ import type {
   ToolUseBlock,
 } from "../types/messages.js";
 import type { ToolResult } from "../types/tools.js";
+import type { PreToolUseHook } from "../types/hooks.js";
 
 const DEFAULT_MAX_TOOL_CALLS = 200;
 const DEFAULT_MAX_TOKENS = 8192;
@@ -20,6 +21,8 @@ export interface RunTurnOptions {
   config: Config;
   system: string;
   signal?: AbortSignal;
+  /** 工具执行前的裁决回调（插件 hooks 由调用方组装）；deny 转 is_error tool_result，不破坏配对 */
+  preToolUse?: PreToolUseHook;
   onEvent: (event: AgentEvent) => void;
   maxToolCalls?: number;
   maxTokens?: number;
@@ -33,11 +36,24 @@ function endInterrupted(history: History, onEvent: (e: AgentEvent) => void): voi
 async function executeTool(
   registry: ToolRegistry,
   toolUse: ToolUseBlock,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  preToolUse?: PreToolUseHook
 ): Promise<ToolResult> {
   const tool = registry.get(toolUse.name);
   if (!tool) {
     return { content: `未知工具: ${toolUse.name}`, isError: true };
+  }
+  if (preToolUse) {
+    try {
+      const decision = await preToolUse(toolUse, { signal });
+      if (decision.behavior === "deny") {
+        return { content: decision.reason ?? "[插件拦截了本次工具调用]", isError: true };
+      }
+    } catch (err) {
+      // 裁决器自身异常按 fail-closed 处理：不执行工具
+      const message = err instanceof Error ? err.message : String(err);
+      return { content: `[插件 hook 异常，按 fail-closed 拦截] ${message}`, isError: true };
+    }
   }
   try {
     return await tool.execute(toolUse.input, { signal });
@@ -133,7 +149,7 @@ export async function runTurn(opts: RunTurnOptions): Promise<void> {
             name: toolUse.name,
             input: toolUse.input,
           });
-          const result = await executeTool(registry, toolUse, signal);
+          const result = await executeTool(registry, toolUse, signal, opts.preToolUse);
           onEvent({
             type: "tool_end",
             id: toolUse.id,

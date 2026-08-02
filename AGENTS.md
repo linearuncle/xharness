@@ -78,6 +78,20 @@ tool_use/tool_result 配对中间则**向旧侧扩窗**（宁多保留不拆对�
 内置命令（/help /clear /compact /effort /exit）优先级高于同名技能。技能双触发：
 用户 `/<name>`、模型经 `Skill` 元工具。
 
+### 插件系统（src/plugins/，规格见 GOAL.md §4.6）
+
+`~/.agents/plugins/<name>/plugin.json`（项目 `.agents/plugins` 覆盖同名）声明
+preToolUse hooks（matcher 正则 + `/bin/sh -c` command，环境变量 `${PLUGIN_ROOT}`
+`${NODE}`）；协议兼容 codex/Claude Code（stdin JSON，stdout
+`hookSpecificOutput.permissionDecision:"deny"` 即拦截）。deny/超时/非零退出/spawn
+失败都拒绝（fail-closed）。分层：loop.ts 只有通用 `preToolUse` 回调挂载点，deny 转
+`is_error` tool_result 保配对；插件装载与组装在调用方（CLI createSession、GUI
+engine 每回合重载，设置改动即时生效）。内置 `plugins/agentguard`（移植自
+codex-agentguard）首启种子安装到全局目录，`.seeded.json` 标记，用户删除不复装；
+hook 脚本必须零依赖 Node（打包版靠 `ELECTRON_RUN_AS_NODE=1` 跑 `${NODE}`，不得
+假设系统有 python）。GUI 设置 → 插件只管理全局目录，IPC 回传的 root 必须过
+`assertInGlobalDir`。
+
 ## GUI 要点（gui/）
 
 - `engine.js` 按会话（convId）维护 History/Registry/供应商选择；**每回合开始

@@ -57,6 +57,8 @@ writeFileSync(
 );
 
 cpSync(join(ROOT, "dist"), join(STAGING, "dist"), { recursive: true });
+// 内置插件整目录复制（engine 以 gui/../plugins 定位，dev 与打包版布局一致）
+cpSync(join(ROOT, "plugins"), join(STAGING, "plugins"), { recursive: true });
 mkdirSync(join(STAGING, "gui"), { recursive: true });
 for (const f of ["main.js", "engine.js", "store.js", "preload.cjs"]) {
   cpSync(join(GUI, f), join(STAGING, "gui", f));

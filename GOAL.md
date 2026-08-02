@@ -199,6 +199,42 @@ description 文本是工具质量的核心，须参照 Claude Code 的措辞风�
     /effort 切换与非法值；E2E 一例：`/effort none` 与 `high` 下同一问题，none 无思考
     输出、high 有暗色思考段。
 
+### 4.6 插件系统（2026-08-02 立项）
+
+- **F20 插件与 preToolUse hooks**
+  - 目录：全局 `~/.agents/plugins/<name>/`（与技能同级的跨 harness 目录）+ 项目
+    `.agents/plugins/<name>/`，项目覆盖全局同名；每个插件一个 `plugin.json` 清单
+    （name/version/description/enabled/hooks.preToolUse[]）。
+  - hook 声明：`{matcher, command, timeout}`——matcher 为对工具名的正则，command 经
+    `/bin/sh -c` 执行，可用环境变量 `${PLUGIN_ROOT}`（插件目录）与 `${NODE}`
+    （当前 Node 可执行；打包版 GUI 下配合 `ELECTRON_RUN_AS_NODE=1` 让 Electron
+    以纯 node 运行脚本，插件因此无需依赖系统 python/node）。
+  - **协议兼容 codex/Claude Code**：stdin 收
+    `{hook_event_name:"PreToolUse", tool_name, tool_input, cwd}`；stdout 输出
+    `{hookSpecificOutput:{permissionDecision:"deny", permissionDecisionReason}}` 即拦截。
+    显式 deny、非零退出、超时、spawn 失败 → 拒绝（守护类插件自身故障 fail-closed）；
+    正常退出且无裁决输出 → 放行。多 hook 按声明顺序串行，首个 deny 即返回。
+  - **分层**：`loop.ts` 只加通用 `preToolUse` 回调挂载点（不感知插件）；deny 转
+    `is_error` tool_result 落位，**配对不变量优先**（同 §3 铁律）。插件装载
+    （`src/plugins/loader.ts`）与 hook 执行（`hooks.ts`）、安装管理（`install.ts`）
+    在 `src/plugins/`，由调用方（CLI createSession / GUI engine 每回合）组装——
+    与 compact 同款调用方组装模式。GUI 每回合重新 loadPlugins，设置改动即时生效。
+  - **内置插件 agentguard**（`plugins/agentguard/`，移植自
+    github.com/linearuncle/codex-agentguard，MIT）：Bash 工具执行前拦截文件删除
+    （rm/unlink/rmdir/find -delete/git clean/Python/Node 删除 API）与数据库删除 SQL
+    （DROP/TRUNCATE/DELETE FROM），误报有意接受；hook 脚本为零依赖 Node（`${NODE}` 执行）。
+    **默认安装**：CLI/GUI 首启种子复制到 `~/.agents/plugins`，`.seeded.json` 标记
+    「种过」，用户删除后不复装。
+  - **GUI 管理（设置 → 插件，增删改无查）**：列表+详情；新增 = GitHub 仓库
+    （`owner/repo` 或 https URL，git clone --depth 1，支持根 plugin.json 或
+    `plugins/<name>/plugin.json` 布局）/ 本地目录；删 = 两步确认删目录；改 = 启用/禁用
+    开关（写回 plugin.json 的 enabled）+ 清单 textarea 直接编辑（主进程校验 JSON）。
+    只管理全局目录；IPC 信任边界：root 路径必须位于全局插件目录内（assertInGlobalDir）。
+  - 与 §2「YOLO 无运行时过滤」的关系：插件是**用户自装的可选护栏**，非产品内置
+    黑名单；产品默认态的唯一内置插件 agentguard 可一键禁用/删除，YOLO 定位不变。
+  - 验收：单测覆盖 loader 解析/覆盖/非法清单、hook deny/超时/非零退出 fail-closed、
+    loop 集成配对不变量、agentguard 规则命中与放行、种子安装与删除不复装。
+
 ## 5. Tranche 划分（PM 按序推进，每个 tranche 结束交 Judge 审）
 
 | Tranche | 内容 | 出口标准 |
@@ -257,7 +293,8 @@ npm run test:e2e
 
 - 子代理 / 多代理编排
 - MCP 协议
-- Hooks / settings.json 配置体系
+- settings.json 配置体系（Hooks 已由 §4.6 插件系统承载，2026-08-02 解除；
+  插件之外不做通用 hooks 配置）
 - 权限确认模式（YOLO 之外）
 - Plan 模式、git worktree 隔离
 - 持久记忆、Artifact、定时任务

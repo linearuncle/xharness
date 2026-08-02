@@ -10,6 +10,11 @@ import { markedHighlight } from "marked-highlight";
 import hljs from "highlight.js";
 import * as store from "./store.js";
 import * as engine from "./engine.js";
+import { loadPlugins } from "../dist/plugins/loader.js";
+import {
+  installFromGitHub, installFromLocalDir, removePlugin,
+  setPluginEnabled, readManifest, writeManifest,
+} from "../dist/plugins/install.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ATT_DIR = join(store.DATA_DIR, "attachments");
@@ -200,6 +205,78 @@ ipcMain.handle("settings:upsert", (_e, provider) => {
 ipcMain.handle("settings:delete", (_e, id) => {
   store.deleteProvider(id);
   return { providers: store.getProvidersSafe() };
+});
+
+// ---------- 插件管理（只管理全局目录；项目级 .agents/plugins 仅运行时生效） ----------
+
+// 渲染层拿到的是纯数据视图；root 回传主进程时经 assertInGlobalDir 校验（信任边界）
+function pluginList() {
+  return loadPlugins({ projectDir: null }).map((p) => ({
+    name: p.name,
+    version: p.version,
+    description: p.description,
+    enabled: p.enabled,
+    root: p.root,
+    hookCount: p.preToolUse.length,
+  }));
+}
+
+ipcMain.handle("plugins:list", () => pluginList());
+
+// git clone 为同步调用（小仓库秒级）；超时 60s 由 install 层兜底
+ipcMain.handle("plugins:install-github", (_e, url) => {
+  try {
+    const name = installFromGitHub(String(url ?? ""));
+    return { ok: true, name, plugins: pluginList() };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle("plugins:install-local", async () => {
+  const r = await dialog.showOpenDialog(win, { properties: ["openDirectory"] });
+  if (r.canceled || !r.filePaths[0]) return { ok: true, canceled: true };
+  try {
+    const name = installFromLocalDir(r.filePaths[0]);
+    return { ok: true, name, plugins: pluginList() };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle("plugins:remove", (_e, root) => {
+  try {
+    removePlugin(String(root ?? ""));
+    return { ok: true, plugins: pluginList() };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle("plugins:setEnabled", (_e, { root, enabled }) => {
+  try {
+    setPluginEnabled(String(root ?? ""), !!enabled);
+    return { ok: true, plugins: pluginList() };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle("plugins:manifest-get", (_e, root) => {
+  try {
+    return { ok: true, text: readManifest(String(root ?? "")) };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle("plugins:manifest-save", (_e, { root, text }) => {
+  try {
+    writeManifest(String(root ?? ""), String(text ?? ""));
+    return { ok: true, plugins: pluginList() };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
 });
 
 ipcMain.handle("project:add", async () => {

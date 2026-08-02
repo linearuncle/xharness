@@ -445,6 +445,37 @@ body {
 /* 模型菜单分组 */
 .mm-group { font-size: 12px; color: var(--text-3); padding: 7px 10px 3px; }
 
+/* 设置-插件页（结构复用供应商卡片） */
+#plugin-card {
+  display: flex; border: 1px solid var(--card-border); border-radius: 14px;
+  min-height: 480px; max-width: 1100px; overflow: hidden;
+}
+#plugin-list { width: 260px; min-width: 260px; border-right: 1px solid var(--border); padding: 8px; }
+#plugin-detail { flex: 1; padding: 22px 26px; }
+#plugin-detail label { display: block; font-size: 13px; color: var(--text-2); margin: 14px 0 6px; }
+#plugin-detail textarea {
+  width: 100%; min-height: 200px; padding: 10px 12px; resize: vertical;
+  border: 1px solid var(--card-border); border-radius: 9px; outline: none; background: #fff;
+  font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+#plugin-detail textarea:focus { border-color: #b9b9b6; }
+#plugin-backdrop {
+  position: fixed; inset: 0; z-index: 80; background: rgba(0,0,0,.28);
+  display: flex; align-items: center; justify-content: center;
+}
+#plugin-dialog {
+  background: #fff; border-radius: 14px; width: 480px; padding: 20px 22px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.2);
+}
+#plugin-dialog .md-title { font-size: 15px; font-weight: 700; display: flex; justify-content: space-between; margin-bottom: 6px; }
+#plugin-dialog label { display: block; font-size: 13px; color: var(--text-2); margin: 12px 0 6px; }
+#plugin-dialog input {
+  width: 100%; padding: 9px 12px; border: 1px solid var(--card-border);
+  border-radius: 9px; font: inherit; font-size: 13.5px; outline: none;
+}
+#plugin-dialog .md-actions { align-items: center; }
+#plugin-dialog .env-hint { margin: 0 auto 0 0; }
+
 /* 设置打开时，禁用下层界面的窗口拖拽区，否则会拦截设置面板的点击（Electron 拖拽区不受 z-index 遮挡影响） */
 body.settings-open #empty-state,
 body.settings-open #chat-header,
