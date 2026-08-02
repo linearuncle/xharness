@@ -1,6 +1,7 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 /* 主题变量：默认值 = 浅色 Codex；运行时由 theme.js 按外观设置整套覆写 */
 :root {
+  color-scheme: light;
   --bg: #ffffff;
   --sb-bg: #f7f7f5;
   --panel: #ffffff;
@@ -29,6 +30,7 @@
  * 数值 = Default 预设深色 + 对比度 50 的推导结果；theme.js 随后以行内变量整套覆写。 */
 @media (prefers-color-scheme: dark) {
   :root {
+    color-scheme: dark;
     --bg: #181818;
     --sb-bg: #202020;
     --panel: #242424;
