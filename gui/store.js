@@ -58,6 +58,26 @@ const DEFAULT_PROVIDER = {
   ],
 };
 
+// Grok（xAI）内置供应商：OAuth 设备码登录（SuperGrok / X Premium 订阅），
+// 不走手填 API Key；api.x.ai 原生支持 Anthropic Messages 格式（实测 /v1/messages）。
+// oauth 凭据 {access, refresh, expires} 与 apiKey 同等敏感，明文存 settings.jsonl（权限 600）。
+const DEFAULT_GROK_PROVIDER = {
+  id: "grok",
+  name: "Grok",
+  baseUrl: "https://api.x.ai",
+  apiFormat: "anthropic",
+  authType: "oauth-xai",
+  apiKey: "",
+  oauth: null,
+  enabled: true,
+  builtin: true,
+  models: [
+    { id: "grok-4.3", contextWindow: 2_000_000, pricing: { input: 1.25, output: 2.5, cacheRead: 0.2 } },
+    { id: "grok-4.5", contextWindow: 2_000_000 },
+    { id: "grok-4.1-fast", contextWindow: 1_000_000 },
+  ],
+};
+
 const line = (obj) => JSON.stringify(obj) + "\n";
 
 function appendLine(file, obj) {
@@ -152,6 +172,10 @@ export function load() {
     providers.unshift({ ...DEFAULT_PROVIDER });
     appendLine(SETTINGS_FILE, { op: "upsert", provider: DEFAULT_PROVIDER, ts: Date.now() });
   }
+  if (!providers.some((p) => p.id === "grok")) {
+    providers.push({ ...DEFAULT_GROK_PROVIDER });
+    appendLine(SETTINGS_FILE, { op: "upsert", provider: DEFAULT_GROK_PROVIDER, ts: Date.now() });
+  }
 
   try { chmodSync(SETTINGS_FILE, 0o600); } catch { /* 文件可能不存在 */ }
 
@@ -208,11 +232,11 @@ export function getProviders() {
   return providers;
 }
 
-// 给渲染进程的脱敏视图：key 不经 IPC 下发
+// 给渲染进程的脱敏视图：key 与 oauth 凭据不经 IPC 下发
 export function getProvidersSafe() {
   return providers.map((p) => {
-    const { apiKey, ...rest } = p;
-    return { ...rest, apiKey: "", hasKey: !!apiKey };
+    const { apiKey, oauth, ...rest } = p;
+    return { ...rest, apiKey: "", hasKey: !!apiKey || !!oauth?.refresh };
   });
 }
 
@@ -223,10 +247,32 @@ export function upsertProvider(p) {
   // 表单会回填已保存 key；apiKey 以提交值为准（含清空）
   if (typeof clean.apiKey !== "string") clean.apiKey = "";
   const i = providers.findIndex((x) => x.id === clean.id);
+  // 表单不携带 oauth 凭据：保存时沿用已存值，避免一次普通保存把登录态清掉
+  if (i >= 0 && clean.oauth === undefined && providers[i].oauth) {
+    clean.oauth = providers[i].oauth;
+  }
   if (i >= 0) providers[i] = clean;
   else providers.push(clean);
   // 换 key 属敏感变更：整文件重写，不在历史行里残留旧 key
   rewriteSettings();
+}
+
+// ---------- OAuth 凭据（主进程内部使用，不经 IPC 下发明文） ----------
+
+export function getProviderOAuth(id) {
+  return providers.find((x) => x.id === id)?.oauth ?? null;
+}
+
+export function setProviderOAuth(id, credential) {
+  const p = providers.find((x) => x.id === id);
+  if (!p) return;
+  p.oauth = credential;
+  // 凭据变更与换 key 同级敏感：整文件重写
+  rewriteSettings();
+}
+
+export function clearProviderOAuth(id) {
+  setProviderOAuth(id, null);
 }
 
 export function deleteProvider(id) {

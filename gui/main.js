@@ -10,6 +10,7 @@ import { markedHighlight } from "marked-highlight";
 import hljs from "highlight.js";
 import * as store from "./store.js";
 import * as engine from "./engine.js";
+import * as oauthXai from "./oauth-xai.js";
 import { loadPlugins } from "../dist/plugins/loader.js";
 import {
   installFromGitHub, installFromLocalDir, removePlugin,
@@ -245,6 +246,45 @@ ipcMain.handle("yolo:ack", () => {
 ipcMain.handle("settings:get", () => ({
   providers: store.getProvidersSafe(),
 }));
+
+// ---------- xAI (Grok) OAuth 设备码登录 ----------
+
+let xaiLoginAbort = null;
+
+// 全程一个 invoke：申请设备码 → 经事件把 userCode 发给渲染层展示 → 开浏览器 →
+// 轮询到用户完成授权 → 凭据落盘。渲染层 await 结果；取消经 oauth:xai:cancel。
+ipcMain.handle("oauth:xai:login", async () => {
+  xaiLoginAbort?.abort();
+  const abort = new AbortController();
+  xaiLoginAbort = abort;
+  try {
+    const device = await oauthXai.startDeviceFlow(abort.signal);
+    win?.webContents.send("oauth:xai:code", {
+      userCode: device.userCode,
+      verificationUri: device.verificationUriComplete ?? device.verificationUri,
+    });
+    // 验证地址已在 startDeviceFlow 强制为 https，可安全交给系统浏览器
+    shell.openExternal(device.verificationUriComplete ?? device.verificationUri);
+    const credential = await oauthXai.pollForTokens(device, abort.signal);
+    store.setProviderOAuth("grok", credential);
+    return { ok: true, providers: store.getProvidersSafe() };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  } finally {
+    if (xaiLoginAbort === abort) xaiLoginAbort = null;
+  }
+});
+
+ipcMain.handle("oauth:xai:cancel", () => {
+  xaiLoginAbort?.abort();
+  xaiLoginAbort = null;
+  return true;
+});
+
+ipcMain.handle("oauth:xai:logout", () => {
+  store.clearProviderOAuth("grok");
+  return { providers: store.getProvidersSafe() };
+});
 
 // 设置详情回填用：列表仍脱敏，仅按 id 取 key（主进程明文）
 ipcMain.handle("settings:getProviderKey", (_e, id) => {

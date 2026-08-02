@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as store from "./store.js";
+import { refreshAccessToken } from "./oauth-xai.js";
 import { createApiClient } from "../dist/api/client.js";
 import { createDefaultRegistry } from "../dist/tools/registry.js";
 import {
@@ -48,11 +49,12 @@ export const EFFORTS = [
   { value: "max", label: "Max" },
 ];
 
-// 内置模型缺省定价（美元/百万 token，DeepSeek 官方价 2026-08）；
+// 内置模型缺省定价（美元/百万 token，官方价 2026-08）；
 // 自定义模型可在模型配置里填 pricing 覆盖；无定价则费用不累计、不显示
 const DEFAULT_MODEL_PRICING = {
   "deepseek-v4-flash": { input: 0.14, output: 0.28, cacheRead: 0.0028 },
   "deepseek-v4-pro": { input: 0.435, output: 0.87, cacheRead: 0.003625 },
+  "grok-4.3": { input: 1.25, output: 2.5, cacheRead: 0.2 },
 };
 
 function emptyStats() {
@@ -118,6 +120,27 @@ function resolveKey(provider) {
   const key = store.getProviderKey(provider.id);
   if (key) return key;
   throw new Error(`供应商「${provider.name}」未填写 API Key，请到设置中填写`);
+}
+
+// OAuth 型供应商：请求前取新鲜 access token（提前 5 分钟过期即刷新并落盘）
+async function resolveAuth(provider) {
+  if (provider.authType === "oauth-xai") {
+    const cred = store.getProviderOAuth(provider.id);
+    if (!cred?.refresh) {
+      throw new Error(`供应商「${provider.name}」未登录，请到设置中使用 Grok 账号登录`);
+    }
+    if (cred.expires > Date.now()) return { apiKey: "", authToken: cred.access };
+    let next;
+    try {
+      next = await refreshAccessToken(cred.refresh);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`Grok 登录已失效（${msg}），请到设置中重新登录`);
+    }
+    store.setProviderOAuth(provider.id, next);
+    return { apiKey: "", authToken: next.access };
+  }
+  return { apiKey: resolveKey(provider) };
 }
 
 const sessions = new Map();
@@ -232,13 +255,15 @@ function createAskTool(s) {
   };
 }
 
-function config(s) {
+// 不含鉴权的会话配置（同步）：sessionMeta/统计等只读场景用
+function configMeta(s) {
   const provider = store.getProviders().find((p) => p.id === s.providerId);
   if (!provider) throw new Error("未找到可用的模型供应商，请到设置中配置");
   const model = provider.models.find((m) => m.id === s.model) ?? provider.models[0];
   if (!model) throw new Error(`供应商「${provider.name}」未配置任何模型`);
   return {
-    apiKey: resolveKey(provider),
+    provider,
+    apiKey: "",
     baseUrl: provider.baseUrl,
     model: model.id,
     contextWindow: model.contextWindow || 200_000,
@@ -249,6 +274,14 @@ function config(s) {
     // 模型配置里的 pricing 优先，内置模型回退默认价；无定价 = 不计费用
     pricing: model.pricing ?? DEFAULT_MODEL_PRICING[model.id] ?? null,
   };
+}
+
+// 含鉴权的请求配置（异步）：OAuth 供应商可能需要刷新 token
+async function config(s) {
+  const meta = configMeta(s);
+  const auth = await resolveAuth(meta.provider);
+  const { provider, ...cfg } = meta;
+  return { ...cfg, ...auth };
 }
 
 function systemPrompt(s) {
@@ -289,7 +322,7 @@ export function sessionMeta(convId) {
   if (s) {
     let stats = null;
     try {
-      stats = statsEvent(s, config(s)).stats;
+      stats = statsEvent(s, configMeta(s)).stats;
     } catch {
       // 供应商/Key 未配置时无法取窗口与定价，统计留空
     }
@@ -383,7 +416,7 @@ export async function send(convId, projectDir, text, savedBlocks, emit, attachme
     if (d.kind === "builtin") {
       try {
         if (d.command === "compact") {
-          const cfg = config(s);
+          const cfg = await config(s);
           const r = await forceCompact({
             history: s.history,
             client: createApiClient(cfg),
@@ -413,7 +446,7 @@ export async function send(convId, projectDir, text, savedBlocks, emit, attachme
           s.stats.speed = null;
           s.stats.cacheHitRate = null;
           try {
-            emit(statsEvent(s, config(s)));
+            emit(statsEvent(s, configMeta(s)));
           } catch {
             // 供应商未配置时跳过统计刷新
           }
@@ -438,7 +471,7 @@ export async function send(convId, projectDir, text, savedBlocks, emit, attachme
   s.abort = new AbortController();
   let cfg, client;
   try {
-    cfg = config(s);
+    cfg = await config(s);
     client = createApiClient(cfg);
   } catch (err) {
     s.running = false;

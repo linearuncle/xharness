@@ -307,6 +307,31 @@ description 文本是工具质量的核心，须参照 Claude Code 的措辞风�
 - 验收：单测覆盖 client usage 采集/无 usage 不发事件；实测 DeepSeek Anthropic 端点
   两处 usage 字段均回报（2026-08-02 curl 验证）。
 
+### 4.8 Grok（xAI）OAuth 供应商（2026-08-02 立项，移植自 pi-mono）
+
+- **接入方式**：设备码流程（RFC 8628，移植 pi-mono `packages/ai/src/auth/oauth/xai.ts`
+  与 `device-code.ts`），面向 SuperGrok / X Premium 订阅账号，无需 API Key。
+  端点：`auth.x.ai/oauth2/device/code` + `/oauth2/token`，client_id 沿用 pi 公开
+  客户端（`b1a00492-…`，公共客户端 id 非机密），referrer=xharness（实测接受）。
+  流程：申请设备码 → GUI 展示 user_code + 自动开浏览器（验证地址强制 https）→
+  RFC 8628 轮询（authorization_pending 续等 / slow_down 加 5s / denied、expired
+  终止）→ 凭据 `{access, refresh, expires}` 落盘。
+- **API 调用**：api.x.ai 原生支持 Anthropic Messages 格式（实测 `/v1/messages`），
+  Base URL `https://api.x.ai`，与既有 client 完全兼容；OAuth access token 走
+  `Authorization: Bearer`（`Config.authToken`，client.ts 里 authToken 设置时
+  apiKey 传 null）。请求前 token 剩余有效期不足（提前 5 分钟）即用 refresh token
+  刷新并落盘（refresh 未轮换时沿用旧值）；刷新失败提示重新登录。
+- **存储**：内置供应商 `grok`（`authType:"oauth-xai"`，builtin），oauth 凭据与
+  apiKey 同级敏感——明文存 settings.jsonl（既有决策，权限 600），变更走整文件
+  重写；IPC 脱敏视图剥离 oauth，仅暴露 hasKey；普通"保存"不携带 oauth 字段时
+  沿用已存凭据（防止保存表单清掉登录态）。
+- **GUI**：设置 → 模型设置的 Grok 详情页以"账号"登录区替代 API Key 输入
+  （登录/重新登录/退出登录 + 设备码展示区）；供应商列表 Grok 行使用 lobehub
+  Grok 图标（MIT，currentColor 随主题）。内置模型：grok-4.3（2M 窗口，含官方
+  定价 $1.25/$2.5/命中 $0.2）、grok-4.5（2M）、grok-4.1-fast（1M）。
+- engine 的 config 拆分：`configMeta`（同步、无鉴权，statsEvent/sessionMeta 用）
+  与 `config`（异步、含 resolveAuth）。CLI 不接入 OAuth（环境变量 key 路径不变）。
+
 ## 5. Tranche 划分（PM 按序推进，每个 tranche 结束交 Judge 审）
 
 | Tranche | 内容 | 出口标准 |

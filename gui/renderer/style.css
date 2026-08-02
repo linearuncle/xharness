@@ -761,3 +761,25 @@ body::after {
 /* 模型弹窗：三格定价输入 */
 .md-price-row { display: flex; gap: 8px; }
 .md-price-row input { flex: 1; min-width: 0; }
+
+/* xAI (Grok) OAuth 登录区 */
+.prov-row .prov-ic { display: inline-flex; width: 16px; justify-content: center; align-items: center; color: var(--text-2); }
+.prov-row .prov-ic svg { width: 14px; height: 14px; }
+.oauth-box {
+  border: 1px solid var(--card-border); border-radius: 10px;
+  padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;
+  background: var(--panel);
+}
+.oauth-status { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--text); }
+.oauth-status .dot { width: 8px; height: 8px; border-radius: 4px; }
+.oauth-status .dot.on { background: #22c55e; }
+.oauth-status .dot.err { background: #ef4444; }
+.oauth-code {
+  font-size: 13px; color: var(--text-2); line-height: 1.7;
+  background: var(--code-bg); border-radius: 8px; padding: 10px 12px;
+}
+.oauth-usercode {
+  font-family: var(--font-code); font-size: 16px; font-weight: 700;
+  color: var(--text); letter-spacing: 2px; margin-left: 4px;
+}
+.oauth-actions { display: flex; align-items: center; gap: 10px; }

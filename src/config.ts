@@ -7,6 +7,9 @@ export type EffortLevel = (typeof EFFORT_LEVELS)[number];
 
 export interface Config {
   apiKey: string;
+  /** OAuth access token：设置时以 Authorization: Bearer 鉴权（apiKey 忽略），
+   *  供 OAuth 型供应商（如 xAI/Grok 订阅）使用；CLI 环境变量路径不产生此字段 */
+  authToken?: string;
   baseUrl: string;
   model: string;
   contextWindow: number;
