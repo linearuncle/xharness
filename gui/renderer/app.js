@@ -292,9 +292,41 @@ function endTextSeg(t) {
   if (t.curTextEl && t.curText.trim()) {
     t.blocks.push({ kind: "assistant", text: t.curText });
     t.textSegs.push({ text: t.curText, el: t.curTextEl });
+    finalRenderSeg(t.curTextEl, t.curText); // 段落定稿：final 渲染（含代码语言自动检测）
   }
   t.curTextEl = null;
   t.curText = "";
+  t.renderSeq++; // 使在途的流式渲染结果过期
+}
+
+// 用 morphdom 把新 HTML 以最小改动打进现有 DOM：未变化的前文节点原地不动
+// （零重绘、选区不丢），只有尾部真正变化的节点被更新——流式渲染不闪的关键。
+function morphHtml(container, html) {
+  const tmp = document.createElement("span");
+  tmp.innerHTML = html;
+  morphdom(container, tmp, { childrenOnly: true });
+}
+
+// 段落定稿渲染（endTextSeg / 历史重放共用最终形态）
+async function finalRenderSeg(segEl, text) {
+  const html = DOMPurify.sanitize(await api.renderMarkdown(text, true));
+  const stream = segEl.querySelector(".stream-text");
+  if (stream) {
+    stream.classList.add("rendered");
+    morphHtml(stream, html);
+  } else {
+    segEl.innerHTML = html;
+  }
+}
+
+// 渲染前修补未闭合的代码围栏：避免流到一半时后文被吞进代码块、闭合瞬间跳变
+function stabilizeMarkdown(text) {
+  const fences = text.match(/^ {0,3}(`{3,}|~{3,})/gm) || [];
+  if (fences.length % 2 === 1) {
+    const last = fences[fences.length - 1].trim();
+    return text + "\n" + (last[0] === "~" ? "~~~" : "```");
+  }
+  return text;
 }
 
 // 流式 markdown 实时渲染：防抖合并，避免每个 token 都打一次 IPC
@@ -308,12 +340,17 @@ function scheduleSegRender(t) {
 
 async function flushSegRender(t) {
   const seq = ++t.renderSeq;
-  const html = DOMPurify.sanitize(await api.renderMarkdown(t.curText));
+  const text = t.curText;
+  // 流式期间 final=false：跳过代码语言自动检测（省 CPU、避免颜色中途换语言）
+  const html = DOMPurify.sanitize(await api.renderMarkdown(stabilizeMarkdown(text), false));
   if (seq !== t.renderSeq) return; // 已有更新的渲染请求，丢弃过期结果
   const stream = t.curTextEl?.querySelector(".stream-text");
   if (stream) {
-    stream.classList.add("rendered");
-    stream.innerHTML = html;
+    if (!stream.classList.contains("rendered")) {
+      stream.classList.add("rendered");
+      stream.textContent = ""; // 清掉首屏纯文本，进入渲染态
+    }
+    morphHtml(stream, html); // 增量打补丁，前文不动
     scrollBottom();
   }
 }
@@ -344,8 +381,11 @@ function onAgentEvent({ id, event }) {
       }
       t.curText += event.text;
       const stream = t.curTextEl.querySelector(".stream-text");
-      stream.textContent = t.curText;
-      stream.classList.remove("rendered"); // 回到纯文本阶段，恢复 pre-wrap 换行
+      if (!stream.classList.contains("rendered")) {
+        // 首个渲染快照到来前（≤100ms）：整段纯文本即时显示
+        stream.textContent = t.curText;
+      }
+      // 渲染态下不直接动 DOM：等下一个 flush 以 morphdom 增量补丁更新（避免样式频闪）
       scheduleSegRender(t);
       break;
     }
@@ -449,10 +489,7 @@ function finishTurn(reason, skipPersist = false) {
   if (reason === "max_tool_calls")
     t.container.appendChild(el(`<div class="notice">[已达单回合工具调用上限]</div>`));
 
-  // 最终 markdown 渲染
-  for (const seg of t.textSegs) {
-    api.renderMarkdown(seg.text).then((h) => (seg.el.innerHTML = DOMPurify.sanitize(h)));
-  }
+  // 最终 markdown 渲染已在各段 endTextSeg 时完成（finishTurn 前必经 endTextSeg）
   // 操作行（只保留可用的复制）
   const last = t.textSegs[t.textSegs.length - 1];
   if (last) {

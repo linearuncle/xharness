@@ -19,7 +19,8 @@ contextBridge.exposeInMainWorld("api", {
   searchFiles: (projectDir, q) =>
     ipcRenderer.invoke("files:search", { projectDir, q }),
   getContext: (projectDir) => ipcRenderer.invoke("ctx:get", projectDir),
-  renderMarkdown: (text) => ipcRenderer.invoke("md:render", text),
+  renderMarkdown: (text, final = true) =>
+    ipcRenderer.invoke("md:render", { text, final }),
   send: (id, text, attachmentPaths) =>
     ipcRenderer.invoke("chat:send", { id, text, attachmentPaths }),
   pickAttachments: () => ipcRenderer.invoke("attach:pick"),

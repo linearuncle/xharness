@@ -27,23 +27,30 @@ process.env.PATH = [
   process.env.PATH ?? "",
 ].filter(Boolean).join(":");
 
-// 代码块经 highlight.js 上色；未知语言走自动检测（始终返回已转义 HTML，之后仍过 DOMPurify）
-const marked = new Marked(
-  markedHighlight({
-    langPrefix: "hljs language-",
-    highlight(code, lang) {
-      try {
-        if (lang && hljs.getLanguage(lang)) {
-          return hljs.highlight(code, { language: lang }).value;
+// 代码块经 highlight.js 上色（始终返回已转义 HTML，之后仍过 DOMPurify）。
+// 双实例：流式渲染只高亮声明了语言的块（省 CPU、避免自动检测中途换色）；
+// 最终渲染对未知语言开启自动检测。
+function makeMarked(autoDetect) {
+  const m = new Marked(
+    markedHighlight({
+      langPrefix: "hljs language-",
+      highlight(code, lang) {
+        try {
+          if (lang && hljs.getLanguage(lang)) {
+            return hljs.highlight(code, { language: lang }).value;
+          }
+          return autoDetect ? hljs.highlightAuto(code).value : "";
+        } catch {
+          return ""; // 空串让 marked 走默认转义
         }
-        return hljs.highlightAuto(code).value;
-      } catch {
-        return ""; // 空串让 marked 走默认转义
-      }
-    },
-  })
-);
-marked.setOptions({ breaks: true });
+      },
+    })
+  );
+  m.setOptions({ breaks: true });
+  return m;
+}
+const markedStream = makeMarked(false);
+const markedFinal = makeMarked(true);
 
 function escapeHtml(s) {
   return s
@@ -238,7 +245,9 @@ ipcMain.handle("ctx:get", (_e, projectDir) =>
 );
 
 // markdown 渲染 + 消毒在渲染层（DOMPurify）完成；这里只做解析
-ipcMain.handle("md:render", (_e, text) => marked.parse(text ?? ""));
+ipcMain.handle("md:render", (_e, { text, final }) =>
+  (final ? markedFinal : markedStream).parse(text ?? "")
+);
 
 ipcMain.handle("chat:answer", (_e, { id, text }) => engine.answer(id, text));
 
