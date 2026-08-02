@@ -50,6 +50,13 @@ body {
   color: var(--text); font-size: 13.5px;
 }
 .sb-item .ic { width: 16px; text-align: center; color: var(--text-2); font-size: 14px; }
+.sb-item .kbd {
+  margin-left: auto; flex: none;
+  font-size: 11px; color: var(--text-3);
+  border: 1px solid var(--card-border); border-bottom-width: 2px;
+  border-radius: 5px; padding: 1px 5px; line-height: 1.4;
+  font-family: "SF Mono", ui-monospace, monospace;
+}
 .sb-item:hover { background: var(--hover); }
 .sb-item.disabled { color: var(--text-3); cursor: default; }
 .sb-item.disabled .ic { color: var(--text-3); }
@@ -61,8 +68,7 @@ body {
   display: flex; align-items: center;
 }
 .sb-section span:first-child { flex: 1; }
-.sb-projects-header .sb-section-actions { visibility: hidden; display: flex; gap: 2px; }
-.sb-projects-header:hover .sb-section-actions { visibility: visible; }
+.sb-projects-header .sb-section-actions { display: flex; gap: 2px; }
 
 .sb-project {
   display: flex; align-items: center; gap: 8px;
