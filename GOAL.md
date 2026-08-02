@@ -359,6 +359,22 @@ description 文本是工具质量的核心，须参照 Claude Code 的措辞风�
   供应商）；勾选弹窗合入草稿（已有模型标记禁选），窗口未知按可编辑的缺省值
   （默认 200K）计，点保存才落盘。端点不支持时明确提示改手工添加。
 
+### 4.10 聊天 Graphviz 图形渲染（2026-08-02 立项）
+
+- 助手消息中 ` ```dot ` / ` ```graphviz ` 代码块在**定稿渲染**（finalRenderSeg）
+  与历史重放（renderStoredBlock）后由渲染层 `hydrateGraphviz` 替换为 SVG 图形；
+  流式期间保持代码文本不替换（与代码语言自动检测同款"定稿才做"策略）。
+- 引擎用 `@hpcc-js/wasm-graphviz`（WASM 移植，跟踪上游最新 Graphviz，当前捆绑
+  15.1.0）；wasm 已内联为单文件 ESM，因 file:// 无法加载 ESM，经 esbuild 转
+  IIFE 后 vendor 于 `gui/renderer/vendor/graphviz.min.js`（全局名
+  `hpccWasmGraphviz`，与 purify/morphdom 同款 vendor 模式）。wasm 首次遇到
+  图形块才编译，之后全局复用。
+- 安全：生成的 SVG 一律过 DOMPurify（svg/svgFilters profile）；CSP
+  `script-src` 增加 `'wasm-unsafe-eval'`（wasm 编译所需，不放宽其他源）。
+- 降级：dot 语法错误保留原代码块并在下方附错误行；wasm 编译失败静默保留代码块。
+- 依赖说明：@hpcc-js/wasm-graphviz 计入 gui dependencies（staging 自动继承），
+  渲染层实际加载 vendor 文件，与 dompurify/morphdom 双轨一致。
+
 ## 5. Tranche 划分（PM 按序推进，每个 tranche 结束交 Judge 审）
 
 | Tranche | 内容 | 出口标准 |

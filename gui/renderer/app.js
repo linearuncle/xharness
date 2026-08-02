@@ -195,7 +195,10 @@ function renderStoredBlock(list, b) {
     list.appendChild(el(`<div class="turn-meta">已处理${b.elapsed ? " " + b.elapsed + "s" : ""}</div>`));
   } else if (b.kind === "assistant") {
     const d = el(`<div class="assistant"></div>`);
-    api.renderMarkdown(b.text).then((h) => (d.innerHTML = DOMPurify.sanitize(h)));
+    api.renderMarkdown(b.text).then((h) => {
+      d.innerHTML = DOMPurify.sanitize(h);
+      hydrateGraphviz(d);
+    });
     list.appendChild(d);
   } else if (b.kind === "tool") {
     list.appendChild(toolLineEl(b.summary, b.isError));
@@ -325,9 +328,49 @@ async function finalRenderSeg(segEl, text) {
   if (stream) {
     stream.classList.add("rendered");
     morphHtml(stream, html);
+    hydrateGraphviz(stream);
   } else {
     segEl.innerHTML = html;
+    hydrateGraphviz(segEl);
   }
+}
+
+/* ---------------- Graphviz 图形渲染 ---------------- */
+// ```dot / ```graphviz 代码块在定稿渲染后替换为 SVG（@hpcc-js/wasm-graphviz，
+// 打包为 vendor/graphviz.min.js，wasm 内联）。wasm 首次用到才编译，之后全局复用。
+// 流式期间不替换（保持代码文本），仅定稿与历史重放时水合。
+let gvPromise = null;
+
+async function hydrateGraphviz(root) {
+  const codes = [...root.querySelectorAll("pre > code.language-dot, pre > code.language-graphviz")]
+    .filter((c) => !c.parentElement.dataset.gvFailed);
+  if (!codes.length) return;
+  let gv;
+  try {
+    gv = await (gvPromise ??= hpccWasmGraphviz.Graphviz.load());
+  } catch {
+    return; // wasm 编译失败：保留代码块原样
+  }
+  let changed = false;
+  for (const code of codes) {
+    const pre = code.parentElement;
+    try {
+      const svg = gv.layout(code.textContent, "svg", "dot");
+      const div = document.createElement("div");
+      div.className = "gv";
+      div.innerHTML = DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true } });
+      pre.replaceWith(div);
+    } catch (e) {
+      // dot 语法错误：保留代码块，下方附错误信息（打标防止重复水合）
+      pre.dataset.gvFailed = "1";
+      const err = document.createElement("div");
+      err.className = "gv-err";
+      err.textContent = `Graphviz 渲染失败：${String(e?.message ?? e).split("\n")[0]}`;
+      pre.after(err);
+    }
+    changed = true;
+  }
+  if (changed) scrollBottom();
 }
 
 // 渲染前修补未闭合的代码围栏：避免流到一半时后文被吞进代码块、闭合瞬间跳变
