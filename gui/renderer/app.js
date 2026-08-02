@@ -841,12 +841,25 @@ function applyProviderBadge(badgeEl, p) {
   badgeEl.textContent = st.label;
 }
 
-function renderProviderDetail() {
+async function renderProviderDetail() {
   const box = $("prov-detail");
   const p = currentProvider();
   if (!p) { box.innerHTML = `<div class="notice">选择或添加一个供应商</div>`; return; }
   const isDraft = S.settings.draft?.id === p.id;
   const work = isDraft ? p : structuredClone(p); // 已存在的编辑基于副本，保存时落盘
+  const renderForId = work.id;
+
+  // 列表 IPC 脱敏不带 key；编辑时单独取回并回填到输入框
+  if (!isDraft && work.hasKey && !work.apiKey) {
+    box.innerHTML = `<div class="notice">加载中…</div>`;
+    try {
+      work.apiKey = (await api.getProviderKey(work.id)) || "";
+    } catch {
+      work.apiKey = "";
+    }
+    // 切换供应商期间的竞态：已不是当前选中项则丢弃
+    if (S.settings.activeProviderId !== renderForId) return;
+  }
 
   box.innerHTML = "";
   const st0 = providerStatus(work);
@@ -874,7 +887,7 @@ function renderProviderDetail() {
     }
     S.settings.activeProviderId = S.providers[0]?.id ?? null;
     renderProviderList();
-    renderProviderDetail();
+    await renderProviderDetail();
   };
 
   const field = (labelText, inputHtml) => {
@@ -892,10 +905,10 @@ function renderProviderDetail() {
 
   field("API 格式", `<select disabled><option>Anthropic Messages (/v1/messages)</option></select>`);
 
-  // API Key：仅手动填写
+  // API Key：回填已保存值（password 默认隐藏，点眼睛可看明文）
   box.appendChild(el(`<label>API Key</label>`));
   const keyRow = el(`<div class="key-row">
-      <input type="password" placeholder="${work.hasKey ? "已保存（留空保持不变）" : "输入 API Key"}" value="" />
+      <input type="password" placeholder="输入 API Key" value="${esc(work.apiKey || "")}" />
       <span class="icon-btn" title="显示/隐藏">👁</span>
     </div>`);
   box.appendChild(keyRow);

@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld("api", {
   setModelChoice: (id, projectDir, providerId, model) =>
     ipcRenderer.invoke("conv:setModelChoice", { id, projectDir, providerId, model }),
   getSettings: () => ipcRenderer.invoke("settings:get"),
+  getProviderKey: (id) => ipcRenderer.invoke("settings:getProviderKey", id),
   upsertProvider: (provider) => ipcRenderer.invoke("settings:upsert", provider),
   deleteProvider: (id) => ipcRenderer.invoke("settings:delete", id),
   setEffort: (id, projectDir, effort) =>

@@ -117,11 +117,16 @@ ipcMain.handle("settings:get", () => ({
   providers: store.getProvidersSafe(),
 }));
 
+// 设置详情回填用：列表仍脱敏，仅按 id 取 key（主进程明文）
+ipcMain.handle("settings:getProviderKey", (_e, id) => {
+  if (typeof id !== "string" || !id) return "";
+  return store.getProviderKey(id) || "";
+});
+
 ipcMain.handle("settings:upsert", (_e, provider) => {
   if (!provider?.id || !provider?.name || !provider?.baseUrl) {
     return { ok: false, error: "名称与 Base URL 必填" };
   }
-  // apiKey 留空表示"保持原 key"（明文由 store 层落盘，600 权限）
   delete provider.hasKey;
   store.upsertProvider(provider);
   return { ok: true, providers: store.getProvidersSafe() };

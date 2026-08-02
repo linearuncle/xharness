@@ -86,7 +86,8 @@ tool_use/tool_result 配对中间则**向旧侧扩窗**（宁多保留不拆对�
   （sessions/、projects.jsonl、settings.jsonl、attachments/）。settings.jsonl 权限 600，
   手填 API Key **明文**存储（有意决策：ad-hoc 签名下 safeStorage/钥匙串每次启动弹框，
   已弃用；不要改回钥匙串）。GUI **仅手动填写** API Key，不读环境变量、无 env/manual
-  双模式。IPC 层脱敏：providers 下发时 key 置空 + `hasKey`，留空保存 = 保持原 key。
+  双模式。IPC：providers 列表仍脱敏（key 置空 + `hasKey`）；设置详情经
+  `settings:getProviderKey` 按 id 取回明文并回填输入框；保存以表单提交值为准。
 - 安全基线（开源审查后确立，勿回退）：渲染层 markdown 一律过 DOMPurify；CSP 收紧；
   附件走 `xatt://` 受控协议（只按文件名从 attachments 目录取），禁止裸 `file://`；
   projectDir 类 IPC 校验必须为已添加项目。

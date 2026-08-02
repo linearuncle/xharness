@@ -166,10 +166,8 @@ export function upsertProvider(p) {
   const clean = { ...p };
   delete clean.keyMode; // 已废弃：GUI 仅手动填写，不再支持环境变量模式
   delete clean.hasKey;
-  const existing = providers.find((x) => x.id === p.id);
-  if (!clean.apiKey && existing?.apiKey) {
-    clean.apiKey = existing.apiKey; // 留空 = 保持原 key
-  }
+  // 表单会回填已保存 key；apiKey 以提交值为准（含清空）
+  if (typeof clean.apiKey !== "string") clean.apiKey = "";
   const i = providers.findIndex((x) => x.id === clean.id);
   if (i >= 0) providers[i] = clean;
   else providers.push(clean);
