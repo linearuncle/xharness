@@ -68,7 +68,8 @@ export type RawStreamEvent =
     }
   | {
       type: "content_block_delta";
-      index: number;
+      /** Anthropic 标准要求携带；xAI Anthropic 兼容流实测会省略。 */
+      index?: number;
       delta:
         | { type: "text_delta"; text: string }
         | { type: "thinking_delta"; thinking: string }
@@ -123,7 +124,15 @@ async function consumeStream(
   signal?: AbortSignal
 ): Promise<StreamMessageResult> {
   const blocks: ContentBlock[] = [];
-  const jsonAcc = new Map<number, string>();
+  // Anthropic 标准流用递增 index 标识 block；xAI 兼容端点实测有两个差异：
+  // content_block_delta 不带 index，且各 content_block_start 会重复 index:0。
+  // 协议本身仍保证 start → deltas → stop 串行，因此按当前活动 block 聚合最稳妥，
+  // 同时完全兼容标准 Anthropic 流，不依赖供应商的 index 实现细节。
+  let activeBlock:
+    | { type: "text"; block: TextBlock }
+    | { type: "thinking" }
+    | { type: "tool_use"; block: Extract<ContentBlock, { type: "tool_use" }>; json: string }
+    | undefined;
   let stopReason: StopReason = null;
   const usage: Usage = {
     inputTokens: 0,
@@ -152,18 +161,31 @@ async function consumeStream(
       case "content_block_start": {
         const cb = event.content_block;
         if (cb.type === "text") {
-          blocks[event.index] = { type: "text", text: cb.text ?? "" };
+          const block: TextBlock = { type: "text", text: cb.text ?? "" };
+          blocks.push(block);
+          activeBlock = { type: "text", block };
         } else if (cb.type === "tool_use") {
-          blocks[event.index] = { type: "tool_use", id: cb.id, name: cb.name, input: {} };
-          jsonAcc.set(event.index, "");
+          const startInput =
+            cb.input && typeof cb.input === "object" && !Array.isArray(cb.input)
+              ? (cb.input as Record<string, unknown>)
+              : {};
+          const block: Extract<ContentBlock, { type: "tool_use" }> = {
+            type: "tool_use",
+            id: cb.id,
+            name: cb.name,
+            input: startInput,
+          };
+          blocks.push(block);
+          activeBlock = { type: "tool_use", block, json: "" };
+        } else {
+          activeBlock = { type: "thinking" };
         }
         break;
       }
       case "content_block_delta": {
         firstOutputAt ??= Date.now();
         if (event.delta.type === "text_delta") {
-          const block = blocks[event.index] as TextBlock | undefined;
-          if (block?.type === "text") block.text += event.delta.text;
+          if (activeBlock?.type === "text") activeBlock.block.text += event.delta.text;
           markEmitted();
           onEvent({ type: "text_delta", text: event.delta.text });
         } else if (event.delta.type === "thinking_delta") {
@@ -171,22 +193,24 @@ async function consumeStream(
           markEmitted();
           onEvent({ type: "thinking_delta", text: event.delta.thinking });
         } else if (event.delta.type === "input_json_delta") {
-          jsonAcc.set(event.index, (jsonAcc.get(event.index) ?? "") + event.delta.partial_json);
+          if (activeBlock?.type === "tool_use") {
+            activeBlock.json += event.delta.partial_json;
+          }
         }
         break;
       }
       case "content_block_stop": {
-        const block = blocks[event.index];
-        if (block?.type === "tool_use") {
-          const raw = (jsonAcc.get(event.index) ?? "").trim();
+        if (activeBlock?.type === "tool_use") {
+          const raw = activeBlock.json.trim();
           if (raw.length > 0) {
             try {
-              block.input = JSON.parse(raw) as Record<string, unknown>;
+              activeBlock.block.input = JSON.parse(raw) as Record<string, unknown>;
             } catch {
-              throw new ApiError(`tool_use 输入 JSON 解析失败（工具 ${block.name}）`);
+              throw new ApiError(`tool_use 输入 JSON 解析失败（工具 ${activeBlock.block.name}）`);
             }
           }
         }
+        activeBlock = undefined;
         break;
       }
       case "message_delta": {
@@ -211,7 +235,7 @@ async function consumeStream(
   }
 
   return {
-    content: blocks.filter((b): b is ContentBlock => b !== undefined),
+    content: blocks,
     stopReason,
     ...(sawUsage ? { usage } : {}),
   };

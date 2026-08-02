@@ -58,6 +58,49 @@ describe("api client", () => {
     ]);
   });
 
+  it("兼容 xAI：delta 缺 index 且各 block 重复 index 时仍按流顺序聚合", async () => {
+    const xaiEvents: RawStreamEvent[] = [
+      { type: "message_start" },
+      { type: "content_block_start", index: 0, content_block: { type: "thinking" } },
+      {
+        type: "content_block_delta",
+        delta: { type: "thinking_delta", thinking: "先分析" },
+      },
+      { type: "content_block_stop", index: 0 },
+      { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+      {
+        type: "content_block_delta",
+        delta: { type: "text_delta", text: "先搜索。" },
+      },
+      { type: "content_block_stop", index: 0 },
+      {
+        type: "content_block_start",
+        index: 0,
+        content_block: { type: "tool_use", id: "call_1", name: "Grep", input: {} },
+      },
+      {
+        type: "content_block_delta",
+        delta: { type: "input_json_delta", partial_json: '{"pattern":"branch"}' },
+      },
+      { type: "content_block_stop", index: 0 },
+      { type: "message_delta", delta: { stop_reason: "tool_use" } },
+      { type: "message_stop" },
+    ];
+    const client = createApiClientFromStreamFn(async () => toStream(xaiEvents), []);
+    const events: AgentEvent[] = [];
+
+    const result = await client.streamMessage(baseOptions((e) => events.push(e)));
+
+    expect(events).toEqual([
+      { type: "thinking_delta", text: "先分析" },
+      { type: "text_delta", text: "先搜索。" },
+    ]);
+    expect(result.content).toEqual([
+      { type: "text", text: "先搜索。" },
+      { type: "tool_use", id: "call_1", name: "Grep", input: { pattern: "branch" } },
+    ]);
+  });
+
   it("429 重试后成功", async () => {
     let calls = 0;
     const client = createApiClientFromStreamFn(async () => {
