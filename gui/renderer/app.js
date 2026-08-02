@@ -889,6 +889,13 @@ async function boot() {
   Theme.watchSystem(() => S.appearance);
   $("username").textContent = "xharness";
   $("avatar").textContent = "x";
+  // CDP 调试标记：主进程检测到 --remote-debugging-port 时常驻显示
+  if (st.debugPort) {
+    const b = $("debug-badge");
+    b.textContent = `CDP:${st.debugPort}`;
+    b.title = `CDP 调试中：--remote-debugging-port=${st.debugPort}，渲染进程可被外部连接执行任意 JS`;
+    b.classList.remove("hidden");
+  }
   updateModelLabel();
   renderSidebar();
   bindSettings();

@@ -204,6 +204,8 @@ ipcMain.handle("state:get", () => ({
   appearance: store.getAppearance(),
   general: store.getGeneral(),
   compactionStrategies: engine.listCompactionStrategies(),
+  // CDP 调试端口（--remote-debugging-port=9223 启动时非空），渲染层据此显示调试标记
+  debugPort: app.commandLine.getSwitchValue("remote-debugging-port") || null,
 }));
 
 // ---------- 通用设置 ----------

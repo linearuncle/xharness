@@ -28,6 +28,10 @@ curl -s http://127.0.0.1:9223/json/version   # 返回 Browser/Protocol-Version �
 curl -s http://127.0.0.1:9223/json/list      # 返回所有可调试目标（page/worker/...）
 ```
 
+界面上也有可视确认：带端口启动时，输入区工具栏会常驻一个 `CDP:9223` 小标记
+（主进程检测 `--remote-debugging-port` 开关，经 `state:get` 的 `debugPort` 字段
+下发；不带端口启动则为 `null`，标记不显示）。
+
 在 Chrome 里打开 `http://127.0.0.1:9223` 也能得到可视化 DevTools 入口。
 
 ## 2. 驱动脚本 gui/scripts/cdp-eval.mjs
@@ -63,11 +67,13 @@ node scripts/cdp-eval.mjs '({
   projectDir: document.querySelector("#es-folder")?.textContent,
   modelLabel: document.querySelector("#model-label")?.textContent.trim(),
   yoloBadge: document.querySelector("#yolo-badge")?.textContent.trim(),
+  debugBadge: document.querySelector("#debug-badge")?.textContent,
   theme: document.documentElement.dataset.theme ?? "light",
 })'
 ```
 
-预期：`title === "xharness"`，三个布尔全 `true`，`yoloBadge` 含"完全访问"。
+预期：`title === "xharness"`，三个布尔全 `true`，`yoloBadge` 含"完全访问"，
+`debugBadge === "CDP:9223"`（带端口启动时）。
 
 ### 3.2 交互 + 设置页 vibrancy 不变量
 

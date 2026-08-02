@@ -336,6 +336,10 @@ body {
 #input::placeholder { color: var(--text-3); }
 #composer-bar { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
 #yolo-badge { color: var(--accent-orange); font-size: 13px; cursor: default; }
+#debug-badge {
+  color: var(--text-3); font-size: 11px; font-family: ui-monospace, monospace;
+  border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; cursor: default;
+}
 #model-label { color: var(--text-2); font-size: 13px; cursor: pointer; padding: 3px 8px; border-radius: 7px; }
 #model-label:hover { background: var(--hover); }
 #btn-send {
