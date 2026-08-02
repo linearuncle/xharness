@@ -9,7 +9,7 @@
 import { execFileSync, execSync } from "node:child_process";
 import {
   existsSync, mkdirSync, rmSync, cpSync, writeFileSync, readFileSync,
-  realpathSync, chmodSync,
+  readdirSync, realpathSync, chmodSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -60,8 +60,10 @@ cpSync(join(ROOT, "dist"), join(STAGING, "dist"), { recursive: true });
 // 内置插件整目录复制（engine 以 gui/../plugins 定位，dev 与打包版布局一致）
 cpSync(join(ROOT, "plugins"), join(STAGING, "plugins"), { recursive: true });
 mkdirSync(join(STAGING, "gui"), { recursive: true });
-for (const f of ["main.js", "engine.js", "store.js", "preload.cjs"]) {
-  cpSync(join(GUI, f), join(STAGING, "gui", f));
+// gui 顶层主进程模块整体复制（清单禁止手写枚举——曾漏 oauth-xai/model-catalog
+// 导致 v0.0.6 首包启动即崩；新增文件自动纳入）
+for (const f of readdirSync(GUI)) {
+  if (/\.(js|cjs)$/.test(f)) cpSync(join(GUI, f), join(STAGING, "gui", f));
 }
 cpSync(join(GUI, "renderer"), join(STAGING, "gui", "renderer"), { recursive: true });
 cpSync(join(GUI, "assets"), join(STAGING, "gui", "assets"), { recursive: true });
