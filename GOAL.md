@@ -359,6 +359,27 @@ description 文本是工具质量的核心，须参照 Claude Code 的措辞风�
   供应商）；勾选弹窗合入草稿（已有模型标记禁选），窗口未知按可编辑的缺省值
   （默认 200K）计，点保存才落盘。端点不支持时明确提示改手工添加。
 
+### 4.10 Mermaid 图渲染（2026-08-02 立项）
+
+- 助手消息里的 ```` ```mermaid ```` 代码围栏在渲染定稿时绘成 SVG 图形；语法错误
+  保留代码块原样（加 `mermaid-error` 标记），不炸消息流。
+- **探测在主进程**（`gui/main.js` mermaidExt）：marked `walkTokens` 把 mermaid
+  code token 改类型使 markedHighlight 跳过，`extensions` 自定义 renderer 输出
+  `<pre class="mermaid">` 占位块；**必须在 markedHighlight 之后注册**（marked 后注册
+  的 walkTokens 先执行，源码才不被高亮改写）。仅 markedFinal 挂载——流式期间
+  mermaid 围栏仍是普通代码块，定稿（finalRenderSeg / 历史重放）才出图。
+- **绘制在渲染层**（`gui/renderer/mermaid.js`，挂 `window.MermaidUI`）：首次遇到
+  占位块才动态 import vendor 的 mermaid ESM 构建（`vendor/mermaid/`，自托管满足
+  CSP `script-src 'self'`，图类型 chunk 由 mermaid 自身再懒加载）；
+  `securityLevel:"strict"` + 全局 `htmlLabels:false`（标签走纯 SVG `<text>`，
+  否则 foreignObject 内嵌 HTML 被 DOMPurify svg profile 剥掉导致节点无字；
+  `flowchart.htmlLabels` 已废弃不可用）；产出 SVG 再过 DOMPurify
+  （svg/svgFilters profile + `ADD_TAGS:["style"]` 保住内联样式）。
+- 主题跟随：`MutationObserver` 监听 `documentElement` 的 `data-theme`，深浅切换时
+  重新 initialize 并按已存源码（`data-mermaid-src`）重渲所有图。
+- 验收：CDP 实测流程图/时序图出 SVG 且节点文字可见、坏图保留代码块、主题切换
+  重渲、普通代码块高亮不受影响、无 CSP 报错。
+
 ## 5. Tranche 划分（PM 按序推进，每个 tranche 结束交 Judge 审）
 
 | Tranche | 内容 | 出口标准 |

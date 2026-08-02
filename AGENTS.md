@@ -106,6 +106,12 @@ hook 脚本必须零依赖 Node（打包版靠 `ELECTRON_RUN_AS_NODE=1` 跑 `${N
 - 安全基线（开源审查后确立，勿回退）：渲染层 markdown 一律过 DOMPurify；CSP 收紧；
   附件走 `xatt://` 受控协议（只按文件名从 attachments 目录取），禁止裸 `file://`；
   projectDir 类 IPC 校验必须为已添加项目。
+- Mermaid 图渲染（规格 GOAL.md §4.10）：main.js 的 mermaidExt 把 ```` ```mermaid ````
+  围栏转 `<pre class="mermaid">` 占位块（仅定稿实例；须在 markedHighlight 之后注册），
+  renderer/mermaid.js 懒加载 `vendor/mermaid/` ESM 构建绘 SVG——`securityLevel:"strict"`
+  + 全局 `htmlLabels:false`（否则标签在 foreignObject 里被 DOMPurify svg profile 剥掉），
+  产出再过 DOMPurify（svg profile + `ADD_TAGS:["style"]`）；`data-theme` 变化按
+  `data-mermaid-src` 重渲。
 - 外观主题（renderer/theme.js + appearance.js）：一套主题只存强调/背景/前景三基色 +
   对比度，其余界面色全部由 `mixColor(bg, fg, t)` 推导——**style.css 禁止再写死颜色**，
   一律走 `:root` CSS 变量；深浅切换经 `data-theme` 与 hljs 双 link 的 disabled 互斥；
@@ -135,8 +141,8 @@ hook 脚本必须零依赖 Node（打包版靠 `ELECTRON_RUN_AS_NODE=1` 跑 `${N
   三段 + 针对本次改动追加的断言），全部通过才算完成。单实例用固定端口 9223；
   **多 worktree 并发必须用文档 §4 的隔离流程**（`XH_DATA_DIR` + 端口 0 +
   `--data-dir`），禁止共享 9223、禁止裸 `pkill -f "MacOS/xharness"`。
-- 依赖最小化：运行时仅 `@anthropic-ai/sdk` + `gray-matter`（GUI 另有 marked/dompurify）；
-  ripgrep 为硬依赖无 JS 回退；新增依赖需先在 GOAL.md 层面确认。
+- 依赖最小化：运行时仅 `@anthropic-ai/sdk` + `gray-matter`（GUI 另有 marked/dompurify/
+  mermaid 等）；ripgrep 为硬依赖无 JS 回退；新增依赖需先在 GOAL.md 层面确认。
 - git：每完成一组改动即用中文提交信息 commit；`dist/`、`release/` 不入库。
 - 单文件不超过 500 行；rg 内容搜索；模型 ID 以 DeepSeek 官方文档为准
   （`deepseek-chat` 等旧名已停用）。

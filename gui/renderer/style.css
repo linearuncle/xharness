@@ -248,6 +248,11 @@ body {
   white-space: pre; display: block;
 }
 
+/* Mermaid 图（pre.mermaid 占位块由 mermaid.js 替换为 SVG；渲染失败保留代码块） */
+.assistant .mermaid-diagram { margin: 12px 0; overflow-x: auto; text-align: center; }
+.assistant .mermaid-diagram svg { max-width: 100%; height: auto; }
+.assistant pre.mermaid-error { border-color: var(--accent); }
+
 /* 表格 */
 .assistant table {
   border-collapse: collapse; margin: 12px 0; font-size: 13.5px;

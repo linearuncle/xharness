@@ -38,10 +38,26 @@ process.env.PATH = [
   process.env.PATH ?? "",
 ].filter(Boolean).join(":");
 
+// ```mermaid 围栏 → <pre class="mermaid"> 占位块（渲染层懒加载 mermaid 绘成 SVG，
+// 见 renderer/mermaid.js）。walkTokens 把 code token 改类型让 markedHighlight 跳过；
+// 须在 markedHighlight 之后注册——marked 后注册的 walkTokens 先执行，源码才不被高亮改写。
+const mermaidExt = {
+  walkTokens(token) {
+    if (token.type === "code" && (token.lang ?? "").trim().toLowerCase() === "mermaid") {
+      token.type = "mermaid";
+    }
+  },
+  extensions: [{
+    name: "mermaid",
+    level: "block",
+    renderer: (token) => `<pre class="mermaid">${escapeHtml(token.text)}</pre>\n`,
+  }],
+};
+
 // 代码块经 highlight.js 上色（始终返回已转义 HTML，之后仍过 DOMPurify）。
 // 双实例：流式渲染只高亮声明了语言的块（省 CPU、避免自动检测中途换色）；
-// 最终渲染对未知语言开启自动检测。
-function makeMarked(autoDetect) {
+// 最终渲染对未知语言开启自动检测，并把 mermaid 围栏转占位块。
+function makeMarked(autoDetect, mermaid) {
   const m = new Marked(
     markedHighlight({
       langPrefix: "hljs language-",
@@ -57,11 +73,12 @@ function makeMarked(autoDetect) {
       },
     })
   );
+  if (mermaid) m.use(mermaidExt);
   m.setOptions({ breaks: true });
   return m;
 }
-const markedStream = makeMarked(false);
-const markedFinal = makeMarked(true);
+const markedStream = makeMarked(false, false);
+const markedFinal = makeMarked(true, true);
 
 function escapeHtml(s) {
   return s
