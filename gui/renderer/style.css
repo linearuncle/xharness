@@ -267,6 +267,13 @@ body {
 .assistant .gv svg { max-width: 100%; height: auto; border: 1px solid var(--border); border-radius: 10px; }
 .assistant .gv-err { color: var(--text-3); font-size: 12.5px; margin: 4px 0 12px; }
 
+/* SVG 代码块的图形预览（源 SVG 已过 DOMPurify SVG profile，见 app.js renderSvgPreviews） */
+.svg-preview {
+  margin: 12px 0; padding: 16px; border: 1px solid var(--border);
+  border-radius: 10px; background: var(--bg); text-align: center; line-height: 0;
+}
+.svg-preview svg { max-width: 100%; max-height: 360px; height: auto; }
+
 /* 表格 */
 .assistant table {
   border-collapse: collapse; margin: 12px 0; font-size: 13.5px;

@@ -235,6 +235,7 @@ function renderStoredBlock(list, b) {
       await window.MermaidUI?.renderIn(d);
       renderD2Blocks(d); // 异步编译，完成后把 d2 代码块替换为图形
       hydrateGraphviz(d);
+      renderSvgPreviews(d);
     });
     list.appendChild(d);
   } else if (b.kind === "tool") {
@@ -376,6 +377,7 @@ async function finalRenderSeg(segEl, text) {
   }
   await window.MermaidUI?.renderIn(segEl); // mermaid 占位块 → SVG（无则秒退）
   renderD2Blocks(segEl); // 异步编译，完成后把 d2 代码块替换为图形
+  renderSvgPreviews(segEl);
 }
 
 // d2/d2lang 代码围栏定稿后编译为 SVG 图形：编译在主进程 wasm（渲染层 CSP 禁网络），
@@ -435,6 +437,26 @@ async function hydrateGraphviz(root) {
     changed = true;
   }
   if (changed) scrollBottom();
+}
+
+// SVG 代码块探测：围栏语言标了 svg，或代码内容本身就是 <svg> 文档（兼容 ```xml
+// 与未标语言的自动检测块）。命中则在代码块下方插入实际渲染的图形。
+// 模型输出不可信：插入前过 DOMPurify 的 SVG profile（剥 script/事件/foreignObject）。
+function renderSvgPreviews(container) {
+  for (const code of container.querySelectorAll("pre > code")) {
+    const src = code.textContent;
+    const isSvg =
+      /\blanguage-svg\b/.test(code.className) ||
+      /^\s*(<\?xml[\s\S]*?\?>\s*)?<svg[\s>]/i.test(src);
+    if (!isSvg) continue;
+    const pre = code.parentElement;
+    if (pre.nextElementSibling?.classList.contains("svg-preview")) continue;
+    const clean = DOMPurify.sanitize(src, { USE_PROFILES: { svg: true, svgFilters: true } });
+    if (!/<svg[\s>]/i.test(clean)) continue; // 消毒后不剩 svg 文档（半截代码等），跳过
+    const box = el(`<div class="svg-preview"></div>`);
+    box.innerHTML = clean;
+    pre.after(box);
+  }
 }
 
 // 渲染前修补未闭合的代码围栏：避免流到一半时后文被吞进代码块、闭合瞬间跳变
