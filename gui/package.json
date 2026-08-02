@@ -9,6 +9,7 @@
     "postinstall": "node scripts/patch-electron-name.mjs"
   },
   "dependencies": {
+    "@hpcc-js/wasm-graphviz": "^1.28.0",
     "@terrastruct/d2": "^0.1.33",
     "dompurify": "^3.4.12",
     "highlight.js": "^11.11.1",

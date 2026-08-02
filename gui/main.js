@@ -58,6 +58,8 @@ const mermaidExt = {
 // 代码块经 highlight.js 上色（始终返回已转义 HTML，之后仍过 DOMPurify）。
 // 双实例：流式渲染只高亮声明了语言的块（省 CPU、避免自动检测中途换色）；
 // 最终渲染对未知语言开启自动检测，并把 mermaid 围栏转占位块。
+// 注意：不高亮时必须原样返回 code（renderer 会转义）——返回 "" 会被
+// marked-highlight 当成高亮结果把块内容清空（updateToken 无回退逻辑）。
 function makeMarked(autoDetect, mermaid) {
   const m = new Marked(
     markedHighlight({
@@ -67,9 +69,9 @@ function makeMarked(autoDetect, mermaid) {
           if (lang && hljs.getLanguage(lang)) {
             return hljs.highlight(code, { language: lang }).value;
           }
-          return autoDetect ? hljs.highlightAuto(code).value : "";
+          return autoDetect ? hljs.highlightAuto(code).value : code;
         } catch {
-          return ""; // 空串让 marked 走默认转义
+          return code; // 原样返回：updateToken 不替换，renderer 负责转义
         }
       },
     })

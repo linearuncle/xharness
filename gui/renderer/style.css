@@ -261,6 +261,12 @@ body {
   white-space: pre-wrap;
 }
 
+/* Graphviz 图形（```dot / ```graphviz 块由 app.js hydrateGraphviz 替换为 SVG；
+   SVG 自带白色底，深浅主题均可读，无需再推导背景色） */
+.assistant .gv { margin: 12px 0; overflow-x: auto; }
+.assistant .gv svg { max-width: 100%; height: auto; border: 1px solid var(--border); border-radius: 10px; }
+.assistant .gv-err { color: var(--text-3); font-size: 12.5px; margin: 4px 0 12px; }
+
 /* 表格 */
 .assistant table {
   border-collapse: collapse; margin: 12px 0; font-size: 13.5px;
