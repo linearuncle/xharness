@@ -11,3 +11,4 @@ coverage/
 .idea/
 *.pem
 release/
+.claude/
