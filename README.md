@@ -26,7 +26,13 @@
 
 ## 三分钟上手
 
-1. **下载安装**：去 [Releases](https://github.com/linearuncle/xharness/releases/latest) 下载 `xharness-mac-arm64.zip`，解压后把 `xharness.app` 拖进「应用程序」。首次打开如被拦截，右键 → 打开。
+1. **下载安装**：去 [Releases](https://github.com/linearuncle/xharness/releases/latest) 下载 `xharness-mac-arm64.zip`，解压后把 `xharness.app` 拖进「应用程序」。
+
+   首次打开会被 macOS 拦截（应用没花钱做苹果公证，属正常现象）：先试右键 → 打开；
+   如果还是打不开，去 **系统设置 → 隐私与安全性**，在「安全性」一栏找到被阻止的
+   xharness，点 **「仍要打开」**：
+
+   <p align="center"><img src="docs/gatekeeper.png" alt="系统设置 → 隐私与安全性 → 仍要打开" width="620" /></p>
 2. **填一个 API Key**：点左下角 ⚙ 进设置。内置了 DeepSeek（去 [platform.deepseek.com](https://platform.deepseek.com) 注册拿 key，很便宜），填入保存即可。用 Kimi 或其他服务见下文。
 3. **开始干活**：点侧栏「项目」旁的 ＋（或 ⌘O）选择你的代码文件夹 → ⌘N 新建对话 → 说出你要做的事。
 
@@ -117,7 +123,7 @@ CLI 通过环境变量配置（`ANTHROPIC_BASE_URL` 换端点、`XHARNESS_MODEL`
 ## 已知限制
 
 - 目前只发布 macOS Apple Silicon 包；其他平台可自行从源码跑 CLI
-- ad-hoc 签名（没交苹果年费），首次打开需要右键 → 打开
+- ad-hoc 签名（没交苹果年费），首次打开需按上文「三分钟上手」的方式放行
 - 重新打开旧会话时，AI 只记得对话文本，不会回放当时每一步工具细节
 - 暂无：MCP、子代理、OpenAI 接口格式的服务
 
