@@ -15,10 +15,12 @@ import { join, basename } from "node:path";
 // 数据目录：macOS 惯例的应用数据位置（不用 app.getPath——本模块在 app.setName 前被 import）。
 // 手填 API Key 以明文存于 settings.jsonl（权限 600）：不碰钥匙串（ad-hoc 签名下每次
 // 重签都会触发授权弹框）；防同机其他用户靠文件权限。GUI 仅支持手动填写，不读环境变量。
+// XH_DATA_DIR：并发测试/多实例隔离用，指定后全部持久化落到该目录（见 docs/cdp-testing.md）。
 const DIR =
-  process.platform === "darwin"
+  process.env.XH_DATA_DIR ||
+  (process.platform === "darwin"
     ? join(homedir(), "Library", "Application Support", "xharness")
-    : join(homedir(), ".xharness", "gui");
+    : join(homedir(), ".xharness", "gui"));
 export const DATA_DIR = DIR;
 const SESS_DIR = join(DIR, "sessions");
 const PROJECTS_FILE = join(DIR, "projects.jsonl");
