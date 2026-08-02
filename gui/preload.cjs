@@ -25,6 +25,10 @@ contextBridge.exposeInMainWorld("api", {
   setAppearance: (a) => ipcRenderer.invoke("appearance:set", a),
   setVibrancy: (enabled) => ipcRenderer.invoke("appearance:vibrancy", enabled),
   getProviderKey: (id) => ipcRenderer.invoke("settings:getProviderKey", id),
+  syncCatalog: () => ipcRenderer.invoke("catalog:sync"),
+  getCatalogInfo: () => ipcRenderer.invoke("catalog:info"),
+  onProvidersUpdate: (fn) =>
+    ipcRenderer.on("providers:update", (_e, providers) => fn(providers)),
   xaiLogin: () => ipcRenderer.invoke("oauth:xai:login"),
   xaiCancelLogin: () => ipcRenderer.invoke("oauth:xai:cancel"),
   xaiLogout: () => ipcRenderer.invoke("oauth:xai:logout"),

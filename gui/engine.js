@@ -74,14 +74,20 @@ function applyUsage(s, cfg, ev) {
   st.output += u.outputTokens;
   st.cacheRead += u.cacheReadTokens;
   st.cacheWrite += u.cacheWriteTokens;
+  const prompt = u.inputTokens + u.cacheReadTokens + u.cacheWriteTokens;
   const p = cfg.pricing;
   if (p) {
+    // 分层定价（models.dev tiers，pi 同款语义）：本次调用完整 prompt 超过阈值
+    // 即整体按该档费率计（升序取最高命中档）
+    let rate = p;
+    for (const t of p.tiers ?? []) {
+      if (prompt > t.inputTokensAbove) rate = t;
+    }
     st.cost +=
-      ((u.inputTokens + u.cacheWriteTokens) * p.input +
-        u.cacheReadTokens * (p.cacheRead ?? p.input) +
-        u.outputTokens * p.output) / 1e6;
+      ((u.inputTokens + u.cacheWriteTokens) * rate.input +
+        u.cacheReadTokens * (rate.cacheRead ?? rate.input) +
+        u.outputTokens * rate.output) / 1e6;
   }
-  const prompt = u.inputTokens + u.cacheReadTokens + u.cacheWriteTokens;
   if (prompt > 0) st.cacheHitRate = (u.cacheReadTokens / prompt) * 100;
   st.contextTokens = prompt + u.outputTokens;
   if (ev.durationMs > 0 && u.outputTokens > 0) {

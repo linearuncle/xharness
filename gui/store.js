@@ -258,6 +258,17 @@ export function upsertProvider(p) {
   rewriteSettings();
 }
 
+/** 模型目录自动同步专用：整表替换指定供应商的 models，有实际差异才落盘。
+ *  返回是否发生了变更。仅内置供应商由 model-catalog.js 调用。 */
+export function updateProviderModels(id, models) {
+  const p = providers.find((x) => x.id === id);
+  if (!p) return false;
+  if (JSON.stringify(p.models) === JSON.stringify(models)) return false;
+  p.models = models;
+  rewriteSettings();
+  return true;
+}
+
 // ---------- OAuth 凭据（主进程内部使用，不经 IPC 下发明文） ----------
 
 export function getProviderOAuth(id) {

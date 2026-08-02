@@ -332,6 +332,25 @@ description 文本是工具质量的核心，须参照 Claude Code 的措辞风�
 - engine 的 config 拆分：`configMeta`（同步、无鉴权，statsEvent/sessionMeta 用）
   与 `config`（异步、含 resolveAuth）。CLI 不接入 OAuth（环境变量 key 路径不变）。
 
+### 4.9 模型目录自动同步（2026-08-02 立项，思路来自 pi 的 generate-models）
+
+- **零手工维护**：内置供应商（deepseek→models.dev `deepseek`、grok→`xai`）的
+  模型列表/上下文窗口/分项定价运行时自动来自 https://models.dev/api.json
+  （pi 在构建期生成静态目录，我们改为运行时拉取）。
+- **同步机制**（`gui/model-catalog.js`）：GUI 启动后台异步同步（24h TTL 缓存于
+  数据目录 `models-catalog.json`，仅存所需供应商子集）；设置页"立即同步"按钮
+  强制刷新；拉取失败静默回退缓存→种子数据，离线永不破坏可用性；有实际差异才
+  写 settings（幂等）。过滤规则同 pi：仅 `tool_call === true` 且窗口 ≥8K 的模型。
+- **分层定价**：pricing 结构扩展 `tiers: [{inputTokensAbove, input, output,
+  cacheRead}]`（models.dev context tier 归一化），engine 计费按本次调用完整
+  prompt 命中的最高档整体计价（pi calculateCost 同款语义，如 grok-4.3 超 200K
+  翻倍）。
+- **GUI**：内置供应商模型列表只读（无删除/添加按钮），每行显示 `$in/$out` 定价
+  徽标（tooltip 含缓存命中价与分层提示）+ 同步状态行；后台同步有变更时经
+  `providers:update` 事件推送渲染层即时刷新。自定义供应商仍手工管理。
+- store 的种子数据仅作首启与离线兜底，engine 的 DEFAULT_MODEL_PRICING 仅作
+  无目录数据时的回退。
+
 ## 5. Tranche 划分（PM 按序推进，每个 tranche 结束交 Judge 审）
 
 | Tranche | 内容 | 出口标准 |

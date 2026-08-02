@@ -783,3 +783,6 @@ body::after {
   color: var(--text); letter-spacing: 2px; margin-left: 4px;
 }
 .oauth-actions { display: flex; align-items: center; gap: 10px; }
+
+/* 模型目录同步行 */
+.catalog-sync-row { display: flex; align-items: center; gap: 12px; margin-top: 8px; }

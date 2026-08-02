@@ -824,6 +824,15 @@ async function boot() {
   if (first) await selectProject(first.dir);
 
   api.onAgentEvent(onAgentEvent);
+  // 模型目录后台同步完成：刷新供应商数据与设置页
+  api.onProvidersUpdate((providers) => {
+    S.providers = providers;
+    updateModelLabel();
+    if (document.body.classList.contains("settings-open")) {
+      renderProviderList();
+      renderProviderDetail();
+    }
+  });
   // xAI OAuth：设备码到达时填充详情页的展示区（浏览器已由主进程打开）
   api.onXaiCode(({ userCode, verificationUri }) => {
     const area = $("xai-code-area");
@@ -1187,33 +1196,72 @@ async function renderProviderDetail() {
     };
   }
 
-  // 模型列表
+  // 模型列表：内置供应商由 models.dev 自动同步（只读），自定义供应商手工管理
+  const managed = !!work.builtin;
   box.appendChild(el(`<label>模型列表</label>`));
   const modelList = el(`<div></div>`);
   box.appendChild(modelList);
+  const fmtCtx = (n) =>
+    n >= 1_000_000 ? n / 1_000_000 + "M" : Math.round(n / 1000) + "K";
   const renderModels = () => {
     modelList.innerHTML = "";
     for (const mod of work.models) {
+      const price = mod.pricing
+        ? `<span class="ctx-badge" title="定价（美元/百万 token）：输入 $${mod.pricing.input} / 输出 $${mod.pricing.output}${mod.pricing.cacheRead !== undefined ? ` / 缓存命中 $${mod.pricing.cacheRead}` : ""}${mod.pricing.tiers?.length ? "（超长上下文分层加价）" : ""}">$${mod.pricing.input}/$${mod.pricing.output}</span>`
+        : "";
       const r = el(`<div class="model-row">
           <span>${esc(mod.id)}</span>
-          <span class="ctx-badge">${mod.contextWindow >= 1_000_000 ? (mod.contextWindow / 1_000_000) + "M" : Math.round(mod.contextWindow / 1000) + "K"}</span>
-          <span class="icon-btn" title="删除">🗑</span>
+          ${price}
+          <span class="ctx-badge">${fmtCtx(mod.contextWindow)}</span>
+          ${managed ? "" : `<span class="icon-btn" title="删除">🗑</span>`}
         </div>`);
-      r.querySelector(".icon-btn").onclick = () => {
-        work.models = work.models.filter((x) => x !== mod);
-        renderModels();
-      };
+      if (!managed) {
+        r.querySelector(".icon-btn").onclick = () => {
+          work.models = work.models.filter((x) => x !== mod);
+          renderModels();
+        };
+      }
       modelList.appendChild(r);
     }
   };
   renderModels();
-  const addModelBtn = el(`<button class="btn">＋ 添加模型</button>`);
-  box.appendChild(addModelBtn);
-  addModelBtn.onclick = () => openModelDialog((id, ctx, pricing) => {
-    if (work.models.some((x) => x.id === id)) return;
-    work.models.push({ id, contextWindow: ctx, ...(pricing ? { pricing } : {}) });
-    renderModels();
-  });
+  if (managed) {
+    const syncRow = el(`<div class="catalog-sync-row">
+        <span class="env-hint" id="catalog-hint">模型与定价每日自动从 models.dev 同步</span>
+        <button class="btn" id="catalog-sync">立即同步</button>
+      </div>`);
+    box.appendChild(syncRow);
+    api.getCatalogInfo().then(({ fetchedAt }) => {
+      const hint = syncRow.querySelector("#catalog-hint");
+      if (hint && fetchedAt) {
+        hint.textContent = `模型与定价每日自动从 models.dev 同步 · 上次 ${new Date(fetchedAt).toLocaleString()}`;
+      }
+    });
+    const syncBtn = syncRow.querySelector("#catalog-sync");
+    syncBtn.onclick = async () => {
+      syncBtn.disabled = true;
+      syncBtn.textContent = "同步中…";
+      const r = await api.syncCatalog();
+      S.providers = r.providers;
+      if (S.settings.activeProviderId !== renderForId) return;
+      if (r.synced) {
+        renderProviderList();
+        await renderProviderDetail();
+      } else {
+        syncBtn.disabled = false;
+        syncBtn.textContent = "立即同步";
+        syncRow.querySelector("#catalog-hint").textContent = `同步失败：${r.error ?? "网络不可用"}（继续使用本地数据）`;
+      }
+    };
+  } else {
+    const addModelBtn = el(`<button class="btn">＋ 添加模型</button>`);
+    box.appendChild(addModelBtn);
+    addModelBtn.onclick = () => openModelDialog((id, ctx, pricing) => {
+      if (work.models.some((x) => x.id === id)) return;
+      work.models.push({ id, contextWindow: ctx, ...(pricing ? { pricing } : {}) });
+      renderModels();
+    });
+  }
 
   // 保存
   const saveRow = el(`<div class="pd-save-row"><button class="btn primary">保存</button><span class="env-hint" id="pd-msg"></span></div>`);

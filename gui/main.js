@@ -11,6 +11,7 @@ import hljs from "highlight.js";
 import * as store from "./store.js";
 import * as engine from "./engine.js";
 import * as oauthXai from "./oauth-xai.js";
+import { syncModelCatalog, lastSyncedAt } from "./model-catalog.js";
 import { loadPlugins } from "../dist/plugins/loader.js";
 import {
   installFromGitHub, installFromLocalDir, removePlugin,
@@ -177,6 +178,16 @@ app.whenReady().then(async () => {
     }
   });
   createWindow();
+
+  // 模型目录自动同步（models.dev，24h TTL）：启动后台执行，有变更即推送渲染层；
+  // 失败静默（离线用缓存/种子），永不阻塞启动
+  syncModelCatalog()
+    .then((r) => {
+      if (r.changed) {
+        win?.webContents.send("providers:update", store.getProvidersSafe());
+      }
+    })
+    .catch(() => {});
 });
 
 app.on("window-all-closed", () => app.quit());
@@ -246,6 +257,14 @@ ipcMain.handle("yolo:ack", () => {
 ipcMain.handle("settings:get", () => ({
   providers: store.getProvidersSafe(),
 }));
+
+// 手动"立即同步"模型目录（设置页按钮）
+ipcMain.handle("catalog:sync", async () => {
+  const r = await syncModelCatalog({ force: true });
+  return { ...r, providers: store.getProvidersSafe() };
+});
+
+ipcMain.handle("catalog:info", () => ({ fetchedAt: lastSyncedAt() }));
 
 // ---------- xAI (Grok) OAuth 设备码登录 ----------
 
