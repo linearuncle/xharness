@@ -700,3 +700,10 @@ body.settings-open #app { visibility: hidden; }
   box-shadow: 0 1px 4px rgba(0,0,0,.3); cursor: pointer;
 }
 .ap-slider-val { width: 32px; text-align: right; color: var(--text-2); font-size: 13px; }
+
+/* 窗口描边：深色主题下窗口边缘与深色环境融在一起，画一圈 1px 亮边定边界
+ *（颜色由 theme.js 按前景色推导，浅色主题下为 transparent；盖在最上层不挡交互） */
+body::after {
+  content: ""; position: fixed; inset: 0; z-index: 2147483647;
+  pointer-events: none; border: 1px solid var(--window-border, transparent);
+}

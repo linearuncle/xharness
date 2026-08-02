@@ -121,6 +121,8 @@ function applyTheme(t) {
     "--link": accent,
     "--accent-soft": rgba(accent, dark ? 0.28 : 0.16),
     "--shadow": dark ? "rgba(0,0,0,.5)" : "rgba(0,0,0,.1)",
+    // 深色下窗口边缘与深色桌面/邻窗融为一体，描一圈 1px 亮边；浅色下系统阴影已足够
+    "--window-border": dark ? rgba(fg, 0.22) : "transparent",
     "--font-ui": (t.uiFont ?? "").trim() || DEFAULT_UI_FONT,
     "--font-code": (t.codeFont ?? "").trim() || DEFAULT_CODE_FONT,
   };
