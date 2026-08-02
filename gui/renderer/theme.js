@@ -129,6 +129,8 @@ function applyTheme(t) {
   const root = document.documentElement;
   for (const [key, val] of Object.entries(v)) root.style.setProperty(key, val);
   root.dataset.theme = dark ? "dark" : "light";
+  // 原生控件（滚动条、input 默认样式等）跟 color-scheme 走，深色主题下才是深色滚动条
+  root.style.colorScheme = dark ? "dark" : "light";
 
   // 代码高亮：浅/深 hljs 主题二选一
   const lightCss = document.getElementById("hljs-light");
