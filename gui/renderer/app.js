@@ -112,6 +112,9 @@ function showConvMenu(e, c) {
     it.onclick = async () => { m.remove(); await fn(); };
     m.appendChild(it);
   };
+  mk("拷贝 session id", async () => {
+    await navigator.clipboard.writeText(c.id);
+  });
   mk(c.pinned ? "取消置顶" : "置顶", async () => {
     S.sidebar = await api.pinConversation(c.id, !c.pinned);
     renderSidebar();
