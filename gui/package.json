@@ -13,6 +13,7 @@
     "highlight.js": "^11.11.1",
     "marked": "^12.0.0",
     "marked-highlight": "^2.2.4",
+    "mermaid": "^11.16.0",
     "morphdom": "^2.7.8"
   },
   "devDependencies": {

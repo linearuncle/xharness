@@ -195,7 +195,10 @@ function renderStoredBlock(list, b) {
     list.appendChild(el(`<div class="turn-meta">已处理${b.elapsed ? " " + b.elapsed + "s" : ""}</div>`));
   } else if (b.kind === "assistant") {
     const d = el(`<div class="assistant"></div>`);
-    api.renderMarkdown(b.text).then((h) => (d.innerHTML = DOMPurify.sanitize(h)));
+    api.renderMarkdown(b.text).then(async (h) => {
+      d.innerHTML = DOMPurify.sanitize(h);
+      await window.MermaidUI?.renderIn(d);
+    });
     list.appendChild(d);
   } else if (b.kind === "tool") {
     list.appendChild(toolLineEl(b.summary, b.isError));
@@ -328,6 +331,7 @@ async function finalRenderSeg(segEl, text) {
   } else {
     segEl.innerHTML = html;
   }
+  await window.MermaidUI?.renderIn(segEl); // mermaid 占位块 → SVG（无则秒退）
 }
 
 // 渲染前修补未闭合的代码围栏：避免流到一半时后文被吞进代码块、闭合瞬间跳变
