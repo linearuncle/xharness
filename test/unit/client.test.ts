@@ -200,3 +200,57 @@ describe("api client", () => {
     expect(events).toEqual([{ type: "text_delta", text: "a" }]);
   });
 });
+
+describe("usage 透传", () => {
+  const eventsWithUsage: RawStreamEvent[] = [
+    {
+      type: "message_start",
+      message: {
+        usage: {
+          input_tokens: 120,
+          cache_read_input_tokens: 900,
+          cache_creation_input_tokens: 30,
+        },
+      },
+    },
+    { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+    { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "答复" } },
+    { type: "content_block_stop", index: 0 },
+    {
+      type: "message_delta",
+      delta: { stop_reason: "end_turn" },
+      usage: { output_tokens: 45 },
+    },
+    { type: "message_stop" },
+  ];
+
+  it("采集 message_start/message_delta 的 usage，流末发 usage 事件并随结果返回", async () => {
+    const client = createApiClientFromStreamFn(async () => toStream(eventsWithUsage), []);
+    const events: AgentEvent[] = [];
+    const result = await client.streamMessage(baseOptions((e) => events.push(e)));
+
+    const expected = {
+      inputTokens: 120,
+      outputTokens: 45,
+      cacheReadTokens: 900,
+      cacheWriteTokens: 30,
+    };
+    expect(result.usage).toEqual(expected);
+
+    const usageEvents = events.filter((e) => e.type === "usage");
+    expect(usageEvents).toHaveLength(1);
+    const ev = usageEvents[0] as Extract<AgentEvent, { type: "usage" }>;
+    expect(ev.usage).toEqual(expected);
+    expect(ev.durationMs).toBeGreaterThanOrEqual(0);
+    // usage 事件在文本增量之后（流结束时发出）
+    expect(events[events.length - 1].type).toBe("usage");
+  });
+
+  it("端点未回报 usage 时不发 usage 事件、结果不带 usage 字段", async () => {
+    const client = createApiClientFromStreamFn(async () => toStream(textAndToolEvents), []);
+    const events: AgentEvent[] = [];
+    const result = await client.streamMessage(baseOptions((e) => events.push(e)));
+    expect(result.usage).toBeUndefined();
+    expect(events.some((e) => e.type === "usage")).toBe(false);
+  });
+});

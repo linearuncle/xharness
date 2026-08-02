@@ -1,6 +1,7 @@
 import type { ApiClient } from "../../api/client.js";
 import type { Config } from "../../config.js";
 import type { History } from "../../session/history.js";
+import type { AgentEvent } from "../../types/messages.js";
 
 /** 摘要注入消息的统一前缀：所有策略共用，策略间切换时也能识别既有摘要 */
 export const SUMMARY_PREFIX = "[历史摘要]";
@@ -10,6 +11,8 @@ export interface CompactDeps {
   client: ApiClient;
   config: Config;
   system?: string;
+  /** 摘要调用产生的领域事件（如 usage）回传口；未设则丢弃 */
+  onEvent?: (event: AgentEvent) => void;
 }
 
 export interface CompactResult {

@@ -259,7 +259,7 @@ async function requestSummary(
     tools: [],
     model: deps.config.model,
     maxTokens,
-    onEvent: () => {},
+    onEvent: deps.onEvent ?? (() => {}),
   });
   return response.content
     .filter((b): b is TextBlock => b.type === "text")

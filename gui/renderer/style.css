@@ -718,3 +718,17 @@ body::after {
 .gen-strategy-row input[type="radio"] { margin-top: 3px; accent-color: var(--accent); }
 .gen-strategy-text { display: flex; flex-direction: column; gap: 3px; }
 .gen-strategy-desc { color: var(--text-3); font-size: 12.5px; line-height: 1.5; }
+
+/* 会话统计（composer-bar 右侧，紧凑一行） */
+#session-stats {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--text-3); white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+#session-stats .ss-sep { color: var(--text-3); opacity: .6; }
+#session-stats .ss-part.warn { color: var(--accent-orange); }
+#session-stats .ss-part.crit { color: #dc2626; } /* 与既有 error-block 同色 */
+
+/* 模型弹窗：三格定价输入 */
+.md-price-row { display: flex; gap: 8px; }
+.md-price-row input { flex: 1; min-width: 0; }

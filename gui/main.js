@@ -202,6 +202,9 @@ ipcMain.handle("general:set", (_e, patch) => {
   if (typeof patch?.compactionStrategy === "string") {
     clean.compactionStrategy = patch.compactionStrategy;
   }
+  if (typeof patch?.showSessionStats === "boolean") {
+    clean.showSessionStats = patch.showSessionStats;
+  }
   store.setGeneral(clean);
   return store.getGeneral();
 });

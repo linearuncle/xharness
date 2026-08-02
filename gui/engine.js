@@ -48,6 +48,57 @@ export const EFFORTS = [
   { value: "max", label: "Max" },
 ];
 
+// 内置模型缺省定价（美元/百万 token，DeepSeek 官方价 2026-08）；
+// 自定义模型可在模型配置里填 pricing 覆盖；无定价则费用不累计、不显示
+const DEFAULT_MODEL_PRICING = {
+  "deepseek-v4-flash": { input: 0.14, output: 0.28, cacheRead: 0.0028 },
+  "deepseek-v4-pro": { input: 0.435, output: 0.87, cacheRead: 0.003625 },
+};
+
+function emptyStats() {
+  return {
+    input: 0, output: 0, cacheRead: 0, cacheWrite: 0,
+    cost: 0, cacheHitRate: null, contextTokens: 0, speed: null,
+  };
+}
+
+// usage 领域事件 → 会话累计统计（费用按定价；缓存写按未命中输入价计，DeepSeek 语义）
+function applyUsage(s, cfg, ev) {
+  const u = ev.usage;
+  const st = s.stats;
+  st.input += u.inputTokens;
+  st.output += u.outputTokens;
+  st.cacheRead += u.cacheReadTokens;
+  st.cacheWrite += u.cacheWriteTokens;
+  const p = cfg.pricing;
+  if (p) {
+    st.cost +=
+      ((u.inputTokens + u.cacheWriteTokens) * p.input +
+        u.cacheReadTokens * (p.cacheRead ?? p.input) +
+        u.outputTokens * p.output) / 1e6;
+  }
+  const prompt = u.inputTokens + u.cacheReadTokens + u.cacheWriteTokens;
+  if (prompt > 0) st.cacheHitRate = (u.cacheReadTokens / prompt) * 100;
+  st.contextTokens = prompt + u.outputTokens;
+  if (ev.durationMs > 0 && u.outputTokens > 0) {
+    st.speed = u.outputTokens / (ev.durationMs / 1000);
+  }
+}
+
+function statsEvent(s, cfg) {
+  return {
+    type: "stats",
+    stats: {
+      ...s.stats,
+      hasPricing: !!cfg.pricing,
+      contextWindow: cfg.contextWindow,
+      percent: cfg.contextWindow
+        ? (s.stats.contextTokens / cfg.contextWindow) * 100
+        : null,
+    },
+  };
+}
+
 function enabledProviders() {
   return store.getProviders().filter((p) => p.enabled && p.models?.length);
 }
@@ -103,6 +154,7 @@ export function getSession(convId, projectDir, savedBlocks) {
     registry,
     skills,
     todoStore,
+    stats: emptyStats(),
     running: false,
     abort: null,
     pendingAsk: null,
@@ -194,6 +246,8 @@ function config(s) {
     effort: s.effort || DEFAULT_EFFORT,
     // 全局设置：未知/未设 id 由 registry 回退默认策略
     compactionStrategy: store.getGeneral().compactionStrategy,
+    // 模型配置里的 pricing 优先，内置模型回退默认价；无定价 = 不计费用
+    pricing: model.pricing ?? DEFAULT_MODEL_PRICING[model.id] ?? null,
   };
 }
 
@@ -233,10 +287,17 @@ export function setEffort(convId, effort) {
 export function sessionMeta(convId) {
   const s = sessions.get(convId);
   if (s) {
+    let stats = null;
+    try {
+      stats = statsEvent(s, config(s)).stats;
+    } catch {
+      // 供应商/Key 未配置时无法取窗口与定价，统计留空
+    }
     return {
       providerId: s.providerId,
       model: s.model,
       effort: s.effort || DEFAULT_EFFORT,
+      stats,
     };
   }
   const d = defaultChoice();
@@ -327,7 +388,17 @@ export async function send(convId, projectDir, text, savedBlocks, emit, attachme
             history: s.history,
             client: createApiClient(cfg),
             config: cfg,
+            onEvent: (ev) => {
+              if (ev.type === "usage") {
+                applyUsage(s, cfg, ev);
+                emit(statsEvent(s, cfg));
+              }
+            },
           });
+          if (r.compacted) {
+            s.stats.contextTokens = s.history.estimateTokens();
+            emit(statsEvent(s, cfg));
+          }
           emit({
             type: "notice",
             text: r.compacted
@@ -337,6 +408,15 @@ export async function send(convId, projectDir, text, savedBlocks, emit, attachme
         } else if (d.command === "clear") {
           s.history = new History();
           s.todoStore.todos = [];
+          // 上下文清零；累计 token/费用是已发生的会话开销，保留
+          s.stats.contextTokens = 0;
+          s.stats.speed = null;
+          s.stats.cacheHitRate = null;
+          try {
+            emit(statsEvent(s, config(s)));
+          } catch {
+            // 供应商未配置时跳过统计刷新
+          }
           emit({ type: "cleared" });
         } else {
           emit({ type: "notice", text: `GUI 暂不支持 /${d.command}` });
@@ -368,9 +448,26 @@ export async function send(convId, projectDir, text, savedBlocks, emit, attachme
     return;
   }
 
+  // usage 领域事件在此拦截聚合为会话统计，其余事件原样透传给渲染层
+  const onEvent = (ev) => {
+    if (ev.type === "usage") {
+      applyUsage(s, cfg, ev);
+      emit(statsEvent(s, cfg));
+      return;
+    }
+    emit(ev);
+  };
+
   try {
-    const r = await maybeCompact({ history: s.history, client, config: cfg });
+    const r = await maybeCompact({
+      history: s.history,
+      client,
+      config: cfg,
+      onEvent,
+    });
     if (r.compacted) {
+      s.stats.contextTokens = s.history.estimateTokens();
+      emit(statsEvent(s, cfg));
       emit({
         type: "notice",
         text: `历史接近上下文窗口上限，已自动压缩：${r.beforeTokens} → ${r.afterTokens}`,
@@ -395,7 +492,7 @@ export async function send(convId, projectDir, text, savedBlocks, emit, attachme
       system: systemPrompt(s),
       signal: s.abort.signal,
       preToolUse,
-      onEvent: emit,
+      onEvent,
     });
   } catch (err) {
     emit({ type: "error", message: err instanceof Error ? err.message : String(err) });

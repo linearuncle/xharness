@@ -254,6 +254,28 @@ description 文本是工具质量的核心，须参照 Claude Code 的措辞风�
   - 验收：单测覆盖 loader 解析/覆盖/非法清单、hook deny/超时/非零退出 fail-closed、
     loop 集成配对不变量、agentguard 规则命中与放行、种子安装与删除不复装。
 
+### 4.7 会话用量统计（2026-08-02 立项，参考 pi 的 footer 设计）
+
+- **数据源（分层不破）**：`client.ts` 从原始流 `message_start`/`message_delta` 采集
+  usage（Anthropic 命名：input/output/cache_read/cache_creation），流末发
+  `usage` 领域事件（含 durationMs = 首个输出增量到流末，估算输出速度用），并随
+  `StreamMessageResult.usage` 返回。端点未回报则不发事件。loop 不感知，仅透传 onEvent。
+- **聚合在调用方（GUI engine）**：按会话累计 input/output/cacheRead/cacheWrite/费用；
+  缓存命中率取**最近一次调用** `cacheRead/(input+cacheRead+cacheWrite)`（pi 同款口径）；
+  上下文占用 = 最近一次调用完整 prompt+output 对 contextWindow 占比；compact 的摘要调用
+  经 `CompactDeps.onEvent` 一并计入；压缩/清空后上下文按估算值刷新（费用保留，钱已花出）。
+- **费用**：模型定价（美元/百万 token：input/output/cacheRead，缓存写按 input 价，
+  DeepSeek 语义）存 provider 模型配置 `pricing` 字段，GUI 添加模型弹窗选填；内置
+  deepseek-v4-flash/pro 有官方默认价（engine 内 DEFAULT_MODEL_PRICING）。无定价 =
+  不累计不显示费用。
+- **展示**：composer-bar「完全访问」同行右侧，格式
+  `{ctx%}/{窗口} · {N} t/s · 缓存 {N}% · ${cost}`；>70% 橙、>90% 红；tooltip 含
+  ↑↓/缓存读写/累计费用明细。设置 → 通用「显示会话统计」开关（`general.showSessionStats`，
+  默认开）。
+- CLI 暂不展示（领域事件已就绪，接入只是 render 层工作）。
+- 验收：单测覆盖 client usage 采集/无 usage 不发事件；实测 DeepSeek Anthropic 端点
+  两处 usage 字段均回报（2026-08-02 curl 验证）。
+
 ## 5. Tranche 划分（PM 按序推进，每个 tranche 结束交 Judge 审）
 
 | Tranche | 内容 | 出口标准 |

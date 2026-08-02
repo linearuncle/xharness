@@ -99,7 +99,7 @@ async function doCompact(deps: CompactDeps): Promise<CompactResult> {
       tools: [],
       model: deps.config.model,
       maxTokens: SUMMARY_MAX_TOKENS,
-      onEvent: () => {},
+      onEvent: deps.onEvent ?? (() => {}),
     });
     summary = response.content
       .filter((b): b is TextBlock => b.type === "text")

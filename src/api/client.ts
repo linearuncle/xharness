@@ -6,6 +6,7 @@ import type {
   Message,
   StopReason,
   TextBlock,
+  Usage,
 } from "../types/messages.js";
 
 export class ApiError extends Error {
@@ -39,14 +40,24 @@ export interface StreamMessageOptions {
 export interface StreamMessageResult {
   content: ContentBlock[];
   stopReason: StopReason;
+  /** 本次调用的 token 用量；端点未回报时缺省 */
+  usage?: Usage;
 }
 
 export interface ApiClient {
   streamMessage(opts: StreamMessageOptions): Promise<StreamMessageResult>;
 }
 
+/** 原始流里的 usage 字段（Anthropic 命名） */
+export interface RawUsage {
+  input_tokens?: number;
+  output_tokens?: number;
+  cache_creation_input_tokens?: number;
+  cache_read_input_tokens?: number;
+}
+
 export type RawStreamEvent =
-  | { type: "message_start"; message?: unknown }
+  | { type: "message_start"; message?: { usage?: RawUsage } }
   | {
       type: "content_block_start";
       index: number;
@@ -64,7 +75,7 @@ export type RawStreamEvent =
         | { type: "input_json_delta"; partial_json: string };
     }
   | { type: "content_block_stop"; index: number }
-  | { type: "message_delta"; delta: { stop_reason?: StopReason } }
+  | { type: "message_delta"; delta: { stop_reason?: StopReason }; usage?: RawUsage }
   | { type: "message_stop" };
 
 export interface StreamRequestParams {
@@ -114,10 +125,30 @@ async function consumeStream(
   const blocks: ContentBlock[] = [];
   const jsonAcc = new Map<number, string>();
   let stopReason: StopReason = null;
+  const usage: Usage = {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+  };
+  let sawUsage = false;
+  const startedAt = Date.now();
+  let firstOutputAt: number | undefined;
 
   for await (const event of stream) {
     if (signal?.aborted) throw new ApiError("请求已被中止");
     switch (event.type) {
+      case "message_start": {
+        const raw = event.message?.usage;
+        if (raw) {
+          sawUsage = true;
+          usage.inputTokens = raw.input_tokens ?? 0;
+          usage.cacheReadTokens = raw.cache_read_input_tokens ?? 0;
+          usage.cacheWriteTokens = raw.cache_creation_input_tokens ?? 0;
+          usage.outputTokens = raw.output_tokens ?? 0;
+        }
+        break;
+      }
       case "content_block_start": {
         const cb = event.content_block;
         if (cb.type === "text") {
@@ -129,6 +160,7 @@ async function consumeStream(
         break;
       }
       case "content_block_delta": {
+        firstOutputAt ??= Date.now();
         if (event.delta.type === "text_delta") {
           const block = blocks[event.index] as TextBlock | undefined;
           if (block?.type === "text") block.text += event.delta.text;
@@ -159,6 +191,10 @@ async function consumeStream(
       }
       case "message_delta": {
         if (event.delta.stop_reason !== undefined) stopReason = event.delta.stop_reason;
+        if (event.usage?.output_tokens !== undefined) {
+          sawUsage = true;
+          usage.outputTokens = event.usage.output_tokens;
+        }
         break;
       }
       default:
@@ -166,7 +202,19 @@ async function consumeStream(
     }
   }
 
-  return { content: blocks.filter((b): b is ContentBlock => b !== undefined), stopReason };
+  if (sawUsage) {
+    onEvent({
+      type: "usage",
+      usage,
+      durationMs: Date.now() - (firstOutputAt ?? startedAt),
+    });
+  }
+
+  return {
+    content: blocks.filter((b): b is ContentBlock => b !== undefined),
+    stopReason,
+    ...(sawUsage ? { usage } : {}),
+  };
 }
 
 export function createApiClientFromStreamFn(

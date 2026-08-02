@@ -99,6 +99,7 @@
             <span class="icon-btn" id="btn-plus" title="插入">＋</span>
             <span id="yolo-badge" title="YOLO 模式：所有工具直接执行，无确认、无沙箱">⚠ 完全访问</span>
             <span class="spacer"></span>
+            <span id="session-stats" class="hidden"></span>
             <span id="model-label" title="模型与推理强度">… <span class="chev">▾</span></span>
             <button id="btn-send" title="发送">↑</button>
           </div>
@@ -154,6 +155,8 @@
         <p class="set-desc">上下文压缩等通用行为设置，全局生效。</p>
         <div class="ap-section-label">上下文压缩策略</div>
         <div class="ap-editor"><div class="ap-editor-body" id="general-compaction-rows"><!-- app.js 动态渲染 --></div></div>
+        <div class="ap-section-label">会话统计</div>
+        <div class="ap-editor"><div class="ap-editor-body" id="general-stats-rows"><!-- app.js 动态渲染 --></div></div>
       </div>
       <div id="set-page-plugins" class="set-page hidden">
         <h1>插件</h1>
@@ -179,6 +182,12 @@
       <input id="md-model-id" placeholder="如 deepseek-v4-flash" />
       <label>上下文窗口</label>
       <input id="md-context" type="number" value="200000" />
+      <label>定价（美元/百万 token，选填，用于会话费用统计）</label>
+      <div class="md-price-row">
+        <input id="md-price-in" type="number" step="any" min="0" placeholder="输入" />
+        <input id="md-price-out" type="number" step="any" min="0" placeholder="输出" />
+        <input id="md-price-hit" type="number" step="any" min="0" placeholder="缓存命中" />
+      </div>
       <div class="md-actions">
         <button class="btn" id="md-cancel">取消</button>
         <button class="btn primary" id="md-save">保存</button>

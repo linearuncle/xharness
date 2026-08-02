@@ -16,6 +16,9 @@ const S = {
   activePluginRoot: null,
   attachments: [], // [{path,name,isImage}]
   appearance: null, // 外观设置（boot 时载入，theme.js 应用）
+  general: null, // 通用设置（boot 时载入）
+  compactionStrategies: [],
+  statsByConv: {}, // convId -> 会话统计（engine stats 事件）
 };
 
 const DEFAULT_MODEL_ID = "deepseek-v4-flash";
@@ -167,6 +170,8 @@ async function openConversation(id) {
   S.activeConv = id;
   S.activeProject = c.projectDir;
   S.meta = c.meta;
+  if (c.meta?.stats) S.statsByConv[id] = c.meta.stats;
+  renderSessionStats();
   updateModelLabel();
   await refreshContext(c.projectDir);
   $("chat-title").textContent = c.title;
@@ -460,6 +465,11 @@ function onAgentEvent({ id, event }) {
       finishTurn(null, true);
       return;
     }
+    case "stats": {
+      S.statsByConv[id] = event.stats;
+      if (id === S.activeConv) renderSessionStats();
+      break;
+    }
     case "turn_end": {
       finishTurn(event.reason);
       return;
@@ -638,6 +648,53 @@ async function updatePopup() {
 }
 
 /* ---------------- 模型菜单 ---------------- */
+
+/* ---------------- 会话统计（composer-bar 右侧） ---------------- */
+
+// 与 pi 一致的紧凑 token 格式：999 / 9.2k / 45k / 1.0M
+function fmtTokens(n) {
+  if (n < 1000) return String(Math.round(n));
+  if (n < 10000) return `${(n / 1000).toFixed(1)}k`;
+  if (n < 1000000) return `${Math.round(n / 1000)}k`;
+  if (n < 10000000) return `${(n / 1000000).toFixed(1)}M`;
+  return `${Math.round(n / 1000000)}M`;
+}
+
+function renderSessionStats() {
+  const elx = $("session-stats");
+  const st = S.activeConv ? S.statsByConv[S.activeConv] : null;
+  const enabled = S.general?.showSessionStats !== false;
+  const hasData = st && (st.input > 0 || st.output > 0 || st.contextTokens > 0);
+  if (!enabled || !hasData) {
+    elx.classList.add("hidden");
+    return;
+  }
+  const parts = [];
+  if (st.contextWindow && st.percent !== null) {
+    const pct = st.percent;
+    const cls = pct > 90 ? "crit" : pct > 70 ? "warn" : "";
+    parts.push(
+      `<span class="ss-part ${cls}">${pct.toFixed(1)}%/${fmtTokens(st.contextWindow)}</span>`
+    );
+  }
+  if (st.speed) parts.push(`<span class="ss-part">${Math.round(st.speed)} t/s</span>`);
+  if (st.cacheHitRate !== null && (st.cacheRead > 0 || st.cacheWrite > 0)) {
+    parts.push(`<span class="ss-part">缓存 ${st.cacheHitRate.toFixed(0)}%</span>`);
+  }
+  if (st.hasPricing) parts.push(`<span class="ss-part">$${st.cost.toFixed(3)}</span>`);
+  if (parts.length === 0) {
+    elx.classList.add("hidden");
+    return;
+  }
+  elx.innerHTML = parts.join(`<span class="ss-sep">·</span>`);
+  elx.title =
+    `本会话累计：↑输入 ${fmtTokens(st.input)} ↓输出 ${fmtTokens(st.output)}` +
+    `，缓存读 ${fmtTokens(st.cacheRead)} 写 ${fmtTokens(st.cacheWrite)}` +
+    (st.hasPricing ? `，费用 $${st.cost.toFixed(4)}` : "（未配置定价，不计费用）") +
+    `\n上下文：${fmtTokens(st.contextTokens)} / ${fmtTokens(st.contextWindow)}` +
+    (st.speed ? `\n最近输出速度：${Math.round(st.speed)} tokens/s` : "");
+  elx.classList.remove("hidden");
+}
 
 function updateModelLabel() {
   $("model-label").innerHTML = `${modelShort(S.meta.model)} ${EFFORT_LABEL[S.meta.effort ?? ""] ?? ""} <span class="chev">▾</span>`;
@@ -861,7 +918,7 @@ function switchSettingsPage(page) {
   if (page === "general") renderGeneralPage();
 }
 
-/* 通用设置页：压缩策略单选卡片（点击即保存，全局生效） */
+/* 通用设置页：压缩策略单选卡片 + 会话统计开关（改动即保存，全局生效） */
 function renderGeneralPage() {
   const box = $("general-compaction-rows");
   if (!box) return;
@@ -882,6 +939,27 @@ function renderGeneralPage() {
     };
     box.appendChild(row);
   }
+
+  const statsBox = $("general-stats-rows");
+  statsBox.innerHTML = "";
+  const on = S.general?.showSessionStats !== false;
+  const row = document.createElement("div");
+  row.className = "ap-row";
+  row.innerHTML = `
+    <div class="gen-strategy-text">
+      <div class="ap-row-label">在输入框下方显示会话统计</div>
+      <div class="gen-strategy-desc">上下文占比、输出速度、缓存命中率与本会话累计费用（费用需模型配置定价，内置 DeepSeek 模型已含官方价）。</div>
+    </div>
+    <span class="spacer"></span>
+    <span class="ap-toggle${on ? " on" : ""}"><span class="knob"></span></span>`;
+  const t = row.querySelector(".ap-toggle");
+  t.onclick = async () => {
+    S.general = await api.setGeneral({ showSessionStats: !on });
+    t.classList.toggle("on", S.general.showSessionStats);
+    renderSessionStats();
+    renderGeneralPage();
+  };
+  statsBox.appendChild(row);
 }
 
 function bindSettings() {
@@ -1068,9 +1146,9 @@ async function renderProviderDetail() {
   renderModels();
   const addModelBtn = el(`<button class="btn">＋ 添加模型</button>`);
   box.appendChild(addModelBtn);
-  addModelBtn.onclick = () => openModelDialog((id, ctx) => {
+  addModelBtn.onclick = () => openModelDialog((id, ctx, pricing) => {
     if (work.models.some((x) => x.id === id)) return;
-    work.models.push({ id, contextWindow: ctx });
+    work.models.push({ id, contextWindow: ctx, ...(pricing ? { pricing } : {}) });
     renderModels();
   });
 
@@ -1100,13 +1178,28 @@ function openModelDialog(onSave) {
   modelDialogSave = onSave;
   $("md-model-id").value = "";
   $("md-context").value = "200000";
+  $("md-price-in").value = "";
+  $("md-price-out").value = "";
+  $("md-price-hit").value = "";
   $("modal-backdrop").classList.remove("hidden");
   $("md-model-id").focus();
   $("md-save").onclick = () => {
     const id = $("md-model-id").value.trim();
     const ctx = parseInt($("md-context").value, 10);
     if (!id || !Number.isFinite(ctx) || ctx <= 0) return;
-    modelDialogSave?.(id, ctx);
+    // 定价选填：输入与输出都填了才生效（缓存命中价缺省按输入价计）
+    const num = (el) => {
+      const v = parseFloat(el.value);
+      return Number.isFinite(v) && v >= 0 ? v : null;
+    };
+    const pIn = num($("md-price-in"));
+    const pOut = num($("md-price-out"));
+    const pHit = num($("md-price-hit"));
+    const pricing =
+      pIn !== null && pOut !== null
+        ? { input: pIn, output: pOut, ...(pHit !== null ? { cacheRead: pHit } : {}) }
+        : null;
+    modelDialogSave?.(id, ctx, pricing);
     closeModelDialog();
   };
 }
