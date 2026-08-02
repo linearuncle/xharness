@@ -48,7 +48,8 @@ writeFileSync(
       type: "module",
       main: "gui/main.js",
       license: "MIT",
-      dependencies: { ...rootPkg.dependencies, marked: guiPkg.dependencies.marked, dompurify: guiPkg.dependencies.dompurify },
+      // 引擎依赖 + GUI 全部运行时依赖（整体继承，避免新增依赖漏进包）
+      dependencies: { ...rootPkg.dependencies, ...guiPkg.dependencies },
     },
     null,
     2
