@@ -1213,7 +1213,12 @@ async function renderProviderDetail() {
   const urlInput = field("Base URL", `<input type="text" placeholder="https://api.example.com/anthropic" value="${esc(work.baseUrl)}" />`);
   urlInput.oninput = () => (work.baseUrl = urlInput.value.trim());
 
-  field("API 格式", `<select disabled><option>Anthropic Messages (/v1/messages)</option></select>`);
+  const formatSelect = field("API 格式", `<select>
+      <option value="anthropic">Anthropic Messages (/v1/messages)</option>
+      <option value="openai-responses">OpenAI Responses (/v1/responses)</option>
+    </select>`);
+  formatSelect.value = work.apiFormat || "anthropic";
+  formatSelect.onchange = () => (work.apiFormat = formatSelect.value);
 
   if (work.authType === "oauth-xai") {
     // OAuth 型供应商：账号登录区替代 API Key（设备码流程，浏览器授权）

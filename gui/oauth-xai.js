@@ -1,6 +1,6 @@
 // xAI (Grok) OAuth 设备码流程（RFC 8628），移植自 pi-mono packages/ai/src/auth/oauth/xai.ts
 // 与 SuperGrok / X Premium 订阅账号配套：登录后拿到 access/refresh token，
-// access token 以 Authorization: Bearer 方式调用 https://api.x.ai/v1/messages（Anthropic 格式）。
+// access token 以 Authorization: Bearer 方式调用 https://api.x.ai/v1/responses（OpenAI Response API）。
 // 零依赖：纯 fetch，主进程运行。
 
 const XAI_CLIENT_ID = "b1a00492-073a-47ea-816f-4c329264a828";

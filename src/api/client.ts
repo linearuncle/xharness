@@ -1,4 +1,3 @@
-import Anthropic from "@anthropic-ai/sdk";
 import type { Config, EffortLevel } from "../config.js";
 import type {
   AgentEvent,
@@ -8,6 +7,8 @@ import type {
   TextBlock,
   Usage,
 } from "../types/messages.js";
+import { createAnthropicStreamFn } from "./anthropic.js";
+import { createResponsesStreamFn } from "./responses.js";
 
 export class ApiError extends Error {
   readonly status?: number;
@@ -79,16 +80,15 @@ export type RawStreamEvent =
   | { type: "message_delta"; delta: { stop_reason?: StopReason }; usage?: RawUsage }
   | { type: "message_stop" };
 
+/** 协议中性的请求参数：effort 的线格式映射由各 apiFormat 的 streamFn 自行负责 */
 export interface StreamRequestParams {
   model: string;
   max_tokens: number;
   system: string;
   messages: Message[];
   tools: ApiToolDefinition[];
-  /** DeepSeek Anthropic 端点扩展字段（Thinking Mode）；仅 low/high/max 携带 */
-  reasoning?: { effort: EffortLevel };
-  /** Anthropic 官方参数；effort:"none" 映射为 {type:"disabled"}（Judge T7 裁决 b） */
-  thinking?: { type: "disabled" };
+  /** thinking 档位；未设置时不传推理参数（端点默认行为） */
+  effort?: EffortLevel;
 }
 
 export type StreamFn = (
@@ -254,13 +254,7 @@ export function createApiClientFromStreamFn(
         messages: opts.messages,
         tools: opts.tools,
       };
-      // Judge T7 裁决 b：none → 只传 thinking:{type:"disabled"}（实测可真正关闭思考），
-      // 不传 reasoning 以避免上游修复 effort 后的歧义；low/high/max → 透传 reasoning.effort
-      if (opts.effort === "none") {
-        params.thinking = { type: "disabled" };
-      } else if (opts.effort) {
-        params.reasoning = { effort: opts.effort };
-      }
+      if (opts.effort) params.effort = opts.effort;
       let attempt = 0;
       for (;;) {
         if (opts.signal?.aborted) throw new ApiError("请求已被中止");
@@ -281,36 +275,11 @@ export function createApiClientFromStreamFn(
   };
 }
 
+/** 按 config.apiFormat 分发线格式（缺省 anthropic）；重试/流聚合/领域事件两格式共用 */
 export function createApiClient(config: Config): ApiClient {
-  const sdk = new Anthropic({
-    // authToken 设置时走 Authorization: Bearer（OAuth access token），
-    // 此时 apiKey 必须为 null 以免 SDK 同时发 x-api-key
-    apiKey: config.authToken ? null : config.apiKey,
-    authToken: config.authToken ?? null,
-    baseURL: config.baseUrl,
-    maxRetries: 0,
-  });
-  const streamFn: StreamFn = async (params, signal) => {
-    const request: Anthropic.MessageCreateParamsStreaming = {
-      model: params.model,
-      max_tokens: params.max_tokens,
-      system: params.system,
-      messages: params.messages as unknown as Anthropic.MessageParam[],
-      tools: params.tools as unknown as Anthropic.ToolUnion[],
-      stream: true,
-    };
-    // thinking 是 SDK 原生 ThinkingConfigParam，无需 as
-    if (params.thinking) request.thinking = params.thinking;
-    if (params.reasoning) {
-      // reasoning 是 DeepSeek Anthropic 端点扩展字段，SDK 类型不认识，最小范围 as 透传
-      (
-        request as Anthropic.MessageCreateParamsStreaming & {
-          reasoning?: { effort: EffortLevel };
-        }
-      ).reasoning = params.reasoning;
-    }
-    const stream = await sdk.messages.create(request, { signal });
-    return stream as unknown as AsyncIterable<RawStreamEvent>;
-  };
+  const streamFn =
+    config.apiFormat === "openai-responses"
+      ? createResponsesStreamFn(config)
+      : createAnthropicStreamFn(config);
   return createApiClientFromStreamFn(streamFn);
 }

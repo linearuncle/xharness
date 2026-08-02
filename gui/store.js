@@ -64,13 +64,13 @@ const DEFAULT_PROVIDER = {
 };
 
 // Grok（xAI）内置供应商：OAuth 设备码登录（SuperGrok / X Premium 订阅），
-// 不走手填 API Key；api.x.ai 原生支持 Anthropic Messages 格式（实测 /v1/messages）。
+// 不走手填 API Key；grok 模型只支持 OpenAI Response API（/v1/responses）。
 // oauth 凭据 {access, refresh, expires} 与 apiKey 同等敏感，明文存 settings.jsonl（权限 600）。
 const DEFAULT_GROK_PROVIDER = {
   id: "grok",
   name: "Grok",
   baseUrl: "https://api.x.ai",
-  apiFormat: "anthropic",
+  apiFormat: "openai-responses",
   authType: "oauth-xai",
   apiKey: "",
   oauth: null,

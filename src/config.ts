@@ -5,6 +5,10 @@ import { COMPACTION_STRATEGY_IDS } from "./agent/compaction/registry.js";
 export const EFFORT_LEVELS = ["none", "low", "high", "max"] as const;
 export type EffortLevel = (typeof EFFORT_LEVELS)[number];
 
+/** API 线格式：anthropic=Messages API；openai-responses=OpenAI Response API */
+export const API_FORMATS = ["anthropic", "openai-responses"] as const;
+export type ApiFormat = (typeof API_FORMATS)[number];
+
 export interface Config {
   apiKey: string;
   /** OAuth access token：设置时以 Authorization: Bearer 鉴权（apiKey 忽略），
@@ -13,6 +17,8 @@ export interface Config {
   baseUrl: string;
   model: string;
   contextWindow: number;
+  /** API 线格式；未设置 = anthropic（CLI 环境变量路径恒为 anthropic，GUI 按供应商设置传入） */
+  apiFormat?: ApiFormat;
   /** 未设置 = 不传 reasoning 参数（端点默认 high） */
   effort?: EffortLevel;
   /** 压缩策略 id（见 agent/compaction/registry），未设置 = 默认策略 */
