@@ -233,6 +233,7 @@ function renderStoredBlock(list, b) {
     api.renderMarkdown(b.text).then(async (h) => {
       d.innerHTML = DOMPurify.sanitize(h);
       await window.MermaidUI?.renderIn(d);
+      renderD2Blocks(d); // 异步编译，完成后把 d2 代码块替换为图形
     });
     list.appendChild(d);
   } else if (b.kind === "tool") {
@@ -371,6 +372,28 @@ async function finalRenderSeg(segEl, text) {
     segEl.innerHTML = html;
   }
   await window.MermaidUI?.renderIn(segEl); // mermaid 占位块 → SVG（无则秒退）
+  renderD2Blocks(segEl); // 异步编译，完成后把 d2 代码块替换为图形
+}
+
+// d2/d2lang 代码围栏定稿后编译为 SVG 图形：编译在主进程 wasm（渲染层 CSP 禁网络），
+// 流式中途不触发。编译失败保留原代码块并附错误信息（d2 报错自带行号）。
+async function renderD2Blocks(containerEl) {
+  const codes = containerEl.querySelectorAll("pre > code.language-d2, pre > code.language-d2lang");
+  if (!codes.length) return;
+  const dark = document.documentElement.dataset.theme === "dark";
+  await Promise.all([...codes].map(async (code) => {
+    const pre = code.parentElement;
+    const { svg, error } = await api.renderD2(code.textContent, dark);
+    if (!pre.isConnected) return; // 容器已被后续渲染替换，丢弃过期结果
+    if (svg) {
+      const div = document.createElement("div");
+      div.className = "d2-diagram";
+      div.innerHTML = DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true } });
+      pre.replaceWith(div);
+    } else {
+      pre.insertAdjacentHTML("afterend", `<div class="d2-error">d2 渲染失败：${esc(error)}</div>`);
+    }
+  }));
 }
 
 // 渲染前修补未闭合的代码围栏：避免流到一半时后文被吞进代码块、闭合瞬间跳变

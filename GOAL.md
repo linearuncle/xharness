@@ -379,6 +379,18 @@ description 文本是工具质量的核心，须参照 Claude Code 的措辞风�
   重新 initialize 并按已存源码（`data-mermaid-src`）重渲所有图。
 - 验收：CDP 实测流程图/时序图出 SVG 且节点文字可见、坏图保留代码块、主题切换
   重渲、普通代码块高亮不受影响、无 CSP 报错。
+### 4.11 d2 图形渲染（2026-08-02 立项）
+
+- GUI 聊天中，语言标注为 ```` ```d2 ```` / ```` ```d2lang ```` 的代码块在段落定稿时
+  编译渲染为 SVG 图形（替代纯代码展示）；CLI 终端不做。
+- **编译在主进程**（`@terrastruct/d2`，d2 官方 wasm 的 JS 封装，懒加载单例）：
+  渲染层 CSP `connect-src 'none'` 禁止 fetch wasm，主进程 Node 环境无此限；
+  渲染层经 `d2:render` IPC 拿 SVG 字符串，过 DOMPurify 后替换原 `<pre>`。
+- **流式中途不编译**（wasm 开销大且代码块可能不完整），只在 `finalRenderSeg` /
+  历史重放两处定稿入口触发；编译失败保留原代码块并附 d2 报错（自带行号）。
+- 图形主题随深浅模式（`themeID` 0 / 200）；已渲染的图不随主题切换即时重渲。
+- 依赖决策：`@terrastruct/d2`（MPL-2.0）成为 GUI 运行时依赖，打包 staging 经
+  依赖整体继承自动进包（package-app.mjs 现有机制，无需改脚本）。
 
 ## 5. Tranche 划分（PM 按序推进，每个 tranche 结束交 Judge 审）
 

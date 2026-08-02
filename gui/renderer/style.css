@@ -253,6 +253,14 @@ body {
 .assistant .mermaid-diagram svg { max-width: 100%; height: auto; }
 .assistant pre.mermaid-error { border-color: var(--accent); }
 
+/* d2 图形：d2/d2lang 代码块定稿后编译为 SVG（配色由 d2 主题随深浅模式给） */
+.d2-diagram { margin: 12px 0; overflow-x: auto; text-align: center; }
+.d2-diagram svg { max-width: 100%; height: auto; }
+.d2-error {
+  color: var(--accent-orange); font-size: 12.5px; margin: -6px 0 12px;
+  white-space: pre-wrap;
+}
+
 /* 表格 */
 .assistant table {
   border-collapse: collapse; margin: 12px 0; font-size: 13.5px;
