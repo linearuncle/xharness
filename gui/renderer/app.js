@@ -913,11 +913,17 @@ async function boot() {
   Theme.watchSystem(() => S.appearance);
   $("username").textContent = "xharness";
   $("avatar").textContent = "x";
+  // CDP 调试标记：主进程检测到 --remote-debugging-port 时常驻显示
+  if (st.debugPort) {
+    const b = $("debug-badge");
+    b.textContent = `CDP:${st.debugPort}`;
+    b.title = `CDP 调试中：--remote-debugging-port=${st.debugPort}，渲染进程可被外部连接执行任意 JS`;
+    b.classList.remove("hidden");
+  }
   updateModelLabel();
   renderSidebar();
   bindSettings();
   bindPlusMenu();
-  maybeShowYoloModal(st.yoloAcked);
 
   // 全局快捷键：Cmd+N 新对话 / Cmd+O 添加项目
   window.addEventListener("keydown", (e) => {
@@ -1850,16 +1856,3 @@ function renderAttachChips() {
   }
 }
 
-/* ---------------- 首启 YOLO 风险确认 ---------------- */
-function maybeShowYoloModal(acked) {
-  if (acked) return;
-  const modal = $("yolo-modal");
-  modal.classList.remove("hidden");
-  const agree = $("ym-agree");
-  const start = $("ym-start");
-  agree.onchange = () => (start.disabled = !agree.checked);
-  start.onclick = async () => {
-    await api.yoloAck();
-    modal.classList.add("hidden");
-  };
-}
