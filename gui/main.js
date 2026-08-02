@@ -108,7 +108,34 @@ function createWindow() {
   });
 }
 
-app.whenReady().then(() => {
+// 从非「应用程序」目录直接运行（如解压后的下载目录）时，提示移动过去。
+// dev 判定不用 app.isPackaged（bundle 已改名为 xharness，dev 下也是 true），
+// 以 Resources/app 是否存在区分打包版与 dev。
+async function offerMoveToApplications() {
+  if (process.platform !== "darwin") return false;
+  if (!existsSync(join(process.resourcesPath ?? "", "app"))) return false; // dev 跳过
+  if (app.isInApplicationsFolder()) return false;
+  const { response } = await dialog.showMessageBox({
+    type: "question",
+    message: "移动到「应用程序」文件夹？",
+    detail:
+      "xharness 正从下载/临时目录运行。移动到「应用程序」后启动更方便，升级覆盖也不易出错。",
+    buttons: ["移动并重新打开", "暂不"],
+    defaultId: 0,
+    cancelId: 1,
+  });
+  if (response !== 0) return false;
+  try {
+    // 目标位置已有旧版时直接覆盖
+    return app.moveToApplicationsFolder({ conflictHandler: () => true });
+  } catch (err) {
+    dialog.showErrorBox("移动失败", err.message);
+    return false;
+  }
+}
+
+app.whenReady().then(async () => {
+  if (await offerMoveToApplications()) return; // 已搬移：新位置的实例会自动重启
   store.load();
   try {
     engine.initEngine();
