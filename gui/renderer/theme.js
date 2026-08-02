@@ -4,7 +4,7 @@
 
 // 每个预设：浅/深两套 {accent, background, foreground}
 const THEME_PRESETS = [
-  { id: "codex", name: "Codex",
+  { id: "default", name: "Default",
     light: { accent: "#2563eb", background: "#ffffff", foreground: "#1a1a1a" },
     dark: { accent: "#339cff", background: "#181818", foreground: "#ffffff" } },
   { id: "ayu", name: "Ayu",

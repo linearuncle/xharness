@@ -32,11 +32,11 @@ let appearance = null; // 外观设置（settings.jsonl 重放；null = 默认�
 export const DEFAULT_APPEARANCE = {
   mode: "system", // system | light | dark
   light: {
-    preset: "codex", accent: "#2563eb", background: "#ffffff", foreground: "#1a1a1a",
+    preset: "default", accent: "#2563eb", background: "#ffffff", foreground: "#1a1a1a",
     uiFont: "", codeFont: "", translucentSidebar: false, contrast: 50,
   },
   dark: {
-    preset: "codex", accent: "#339cff", background: "#181818", foreground: "#ffffff",
+    preset: "default", accent: "#339cff", background: "#181818", foreground: "#ffffff",
     uiFont: "", codeFont: "", translucentSidebar: false, contrast: 50,
   },
 };
