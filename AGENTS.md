@@ -17,8 +17,9 @@ cd gui && node scripts/package-app.mjs     # 打包 release/xharness.app + mac-<
 ```
 
 杀 GUI 进程用 `pkill -f "MacOS/xharness"`（Electron bundle 已被 postinstall 改名为
-xharness.app，匹配 "Electron" 会失手）。GUI 调试：加 `--remote-debugging-port=9223`
-后可用原生 WebSocket 直连 CDP 执行 JS（cua 等工具不认自定义 bundle id）。
+xharness.app，匹配 "Electron" 会失手）。GUI 调试/测试走 CDP
+（`--remote-debugging-port=9223` + 原生 WebSocket 直连，`gui/scripts/cdp-eval.mjs`
+驱动），完整方案与标准冒烟检查见 `docs/cdp-testing.md`。
 
 ## 仓库形态
 
@@ -128,11 +129,16 @@ hook 脚本必须零依赖 Node（打包版靠 `ELECTRON_RUN_AS_NODE=1` 跑 `${N
 ## 项目约定
 
 - **YOLO 是产品定位**：无确认、无沙箱、无命令黑名单，不要"顺手"加运行时过滤；
-  披露靠 README/SECURITY.md/首启确认弹窗。
+  披露靠 README/SECURITY.md。
 - **早期零迁移**：数据结构/路径变更一律当全新项目处理，不写迁移与兼容代码。
 - E2E 约定（test/e2e/）：DeepSeek + `deepseek-v4-flash`、mkdtemp 沙箱、提示词禁破坏性
   命令且有 `assertNoDestructiveCommands` 审计、断言产物/退出码优先 + 工具子序列
   （禁全序列指纹）、retry 1 次、无 key skip。
+- **GUI 验证闭环（强制）**：每个 issue/feature 完成后必须重启开发环境——
+  `npm run build` 后按 `docs/cdp-testing.md` 重启 GUI 并做详细测试（标准冒烟
+  三段 + 针对本次改动追加的断言），全部通过才算完成。单实例用固定端口 9223；
+  **多 worktree 并发必须用文档 §4 的隔离流程**（`XH_DATA_DIR` + 端口 0 +
+  `--data-dir`），禁止共享 9223、禁止裸 `pkill -f "MacOS/xharness"`。
 - 依赖最小化：运行时仅 `@anthropic-ai/sdk` + `gray-matter`（GUI 另有 marked/dompurify/
   @terrastruct/d2）；ripgrep 为硬依赖无 JS 回退；新增依赖需先在 GOAL.md 层面确认。
 - git：每完成一组改动即用中文提交信息 commit；`dist/`、`release/` 不入库。
