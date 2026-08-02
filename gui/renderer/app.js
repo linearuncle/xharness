@@ -266,6 +266,7 @@ function beginTurn(list) {
   S.turn = {
     container, metaEl, timer, startTs,
     curTextEl: null, curText: "",
+    curRenderTimer: null, renderSeq: 0,
     thinkingEl: null, thinkingLabelEl: null, thinkingActive: false,
     textSegs: [], toolLines: new Map(), blocks: [{ kind: "divider" }],
     todoEl: null, askEl: null,
@@ -284,12 +285,37 @@ function leaveThinking(t) {
 }
 
 function endTextSeg(t) {
+  if (t.curRenderTimer) {
+    clearTimeout(t.curRenderTimer);
+    t.curRenderTimer = null;
+  }
   if (t.curTextEl && t.curText.trim()) {
     t.blocks.push({ kind: "assistant", text: t.curText });
     t.textSegs.push({ text: t.curText, el: t.curTextEl });
   }
   t.curTextEl = null;
   t.curText = "";
+}
+
+// 流式 markdown 实时渲染：防抖合并，避免每个 token 都打一次 IPC
+function scheduleSegRender(t) {
+  if (t.curRenderTimer) return;
+  t.curRenderTimer = setTimeout(() => {
+    t.curRenderTimer = null;
+    flushSegRender(t);
+  }, 100);
+}
+
+async function flushSegRender(t) {
+  const seq = ++t.renderSeq;
+  const html = DOMPurify.sanitize(await api.renderMarkdown(t.curText));
+  if (seq !== t.renderSeq) return; // 已有更新的渲染请求，丢弃过期结果
+  const stream = t.curTextEl?.querySelector(".stream-text");
+  if (stream) {
+    stream.classList.add("rendered");
+    stream.innerHTML = html;
+    scrollBottom();
+  }
 }
 
 function onAgentEvent({ id, event }) {
@@ -317,7 +343,10 @@ function onAgentEvent({ id, event }) {
         t.container.appendChild(t.curTextEl);
       }
       t.curText += event.text;
-      t.curTextEl.querySelector(".stream-text").textContent = t.curText;
+      const stream = t.curTextEl.querySelector(".stream-text");
+      stream.textContent = t.curText;
+      stream.classList.remove("rendered"); // 回到纯文本阶段，恢复 pre-wrap 换行
+      scheduleSegRender(t);
       break;
     }
     case "tool_start": {
