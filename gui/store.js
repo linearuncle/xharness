@@ -29,7 +29,11 @@ let providers = []; // 模型供应商（settings.jsonl 重放）
 let appearance = null; // 外观设置（settings.jsonl 重放；null = 默认）
 let general = null; // 通用设置（settings.jsonl 重放；null = 默认）
 
-const DEFAULT_GENERAL = { compactionStrategy: "classic", showSessionStats: true };
+const DEFAULT_GENERAL = {
+  compactionStrategy: "classic",
+  showSessionStats: true,
+  disabledSkills: [], // 技能名列表；禁用只影响 GUI 会话装载，不改动技能文件
+};
 
 // 外观默认值：浅/深两套主题独立配置，mode 决定生效哪套（system 跟随系统）
 export const DEFAULT_APPEARANCE = {

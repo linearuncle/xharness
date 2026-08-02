@@ -30,6 +30,12 @@ contextBridge.exposeInMainWorld("api", {
   setEffort: (id, projectDir, effort) =>
     ipcRenderer.invoke("conv:setEffort", { id, projectDir, effort }),
   listSkills: (projectDir) => ipcRenderer.invoke("skills:list", projectDir),
+  listSkillsSettings: () => ipcRenderer.invoke("skillsSettings:list"),
+  setSkillEnabled: (name, enabled) =>
+    ipcRenderer.invoke("skillsSettings:setEnabled", { name, enabled }),
+  createSkill: (name) => ipcRenderer.invoke("skillsSettings:create", name),
+  removeSkill: (file) => ipcRenderer.invoke("skillsSettings:remove", file),
+  openSkillFile: (file) => ipcRenderer.invoke("skillsSettings:open", file),
   searchFiles: (projectDir, q) =>
     ipcRenderer.invoke("files:search", { projectDir, q }),
   getContext: (projectDir) => ipcRenderer.invoke("ctx:get", projectDir),

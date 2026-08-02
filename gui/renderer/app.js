@@ -14,6 +14,9 @@ const S = {
   settings: { activeProviderId: null, draft: null }, // 设置界面状态
   plugins: [], // 设置-插件页列表（主进程纯数据视图）
   activePluginRoot: null,
+  skillsView: null, // 设置-技能页数据（主进程纯数据视图）
+  skillsQuery: "",
+  skillsScope: "all", // all | personal | project
   attachments: [], // [{path,name,isImage}]
   appearance: null, // 外观设置（boot 时载入，theme.js 应用）
   general: null, // 通用设置（boot 时载入）
@@ -905,16 +908,13 @@ boot();
 /* ---------------- 设置界面 ---------------- */
 
 function switchSettingsPage(page) {
-  $("set-nav-models").classList.toggle("active", page === "models");
-  $("set-nav-appearance").classList.toggle("active", page === "appearance");
-  $("set-nav-plugins").classList.toggle("active", page === "plugins");
-  $("set-nav-general").classList.toggle("active", page === "general");
-  $("set-page-models").classList.toggle("hidden", page !== "models");
-  $("set-page-appearance").classList.toggle("hidden", page !== "appearance");
-  $("set-page-plugins").classList.toggle("hidden", page !== "plugins");
-  $("set-page-general").classList.toggle("hidden", page !== "general");
+  for (const p of ["models", "appearance", "plugins", "skills", "general"]) {
+    $(`set-nav-${p}`).classList.toggle("active", page === p);
+    $(`set-page-${p}`).classList.toggle("hidden", page !== p);
+  }
   if (page === "appearance") Appearance.render();
   if (page === "plugins") refreshPlugins();
+  if (page === "skills") refreshSkillsSettings();
   if (page === "general") renderGeneralPage();
 }
 
@@ -980,11 +980,13 @@ function bindSettings() {
   $("md-close").onclick = closeModelDialog;
   $("md-cancel").onclick = closeModelDialog;
   $("set-nav-plugins").onclick = () => switchSettingsPage("plugins");
+  $("set-nav-skills").onclick = () => switchSettingsPage("skills");
   $("set-nav-general").onclick = () => switchSettingsPage("general");
   $("btn-add-plugin-github").onclick = openPluginDialog;
   $("btn-add-plugin-local").onclick = installPluginLocal;
   $("pg-close").onclick = closePluginDialog;
   $("pg-cancel").onclick = closePluginDialog;
+  bindSkillsSettings();
 }
 
 function openSettings() {
@@ -1338,6 +1340,163 @@ async function installPluginLocal() {
   }
   S.activePluginRoot = r.plugins.find((x) => x.name === r.name)?.root ?? null;
   await refreshPlugins(r.plugins);
+}
+
+/* ---------------- 设置-技能管理 ---------------- */
+
+async function refreshSkillsSettings(view) {
+  S.skillsView = view ?? (await api.listSkillsSettings());
+  renderSkillsSettings();
+}
+
+// 全部技能条目拉平：[{skill, scope:"personal"|"project", scopeLabel}]
+function skillEntries() {
+  const v = S.skillsView;
+  if (!v) return [];
+  const out = v.global.map((s) => ({ skill: s, scope: "personal", scopeLabel: "个人" }));
+  for (const p of v.projects) {
+    for (const s of p.skills) {
+      out.push({ skill: s, scope: "project", scopeLabel: p.name });
+    }
+  }
+  return out;
+}
+
+function renderSkillsSettings() {
+  const v = S.skillsView;
+  if (!v) return;
+  renderSkillsDiag(v.warnings);
+
+  const q = S.skillsQuery.toLowerCase();
+  const entries = skillEntries().filter((e) => {
+    if (S.skillsScope !== "all" && e.scope !== S.skillsScope) return false;
+    if (!q) return true;
+    return (
+      e.skill.name.toLowerCase().includes(q) ||
+      e.skill.description.toLowerCase().includes(q)
+    );
+  });
+
+  const box = $("sk-groups");
+  box.innerHTML = "";
+  const groups = [
+    { title: "个人技能", items: entries.filter((e) => e.scope === "personal") },
+    { title: "项目技能", items: entries.filter((e) => e.scope === "project") },
+  ].filter((g) => g.items.length);
+  if (!groups.length) {
+    box.appendChild(el(`<div class="notice">${q ? "没有匹配的技能" : "暂无技能，点右上角 ＋ 新建一个"}</div>`));
+    return;
+  }
+  const disabled = new Set(v.disabled);
+  for (const g of groups) {
+    box.appendChild(el(
+      `<div class="sk-section">${esc(g.title)} <span class="sk-count">${g.items.length} 项</span></div>`
+    ));
+    const card = el(`<div class="sk-card"></div>`);
+    box.appendChild(card);
+    for (const e of g.items) card.appendChild(skillRow(e, disabled));
+  }
+}
+
+function renderSkillsDiag(warnings) {
+  const diag = $("sk-diag");
+  if (!warnings.length) {
+    diag.classList.add("hidden");
+    return;
+  }
+  diag.classList.remove("hidden");
+  diag.innerHTML = `<div class="sk-diag-head"><span class="sk-diag-chev">▸</span>⚠ 技能加载诊断：${warnings.length} 个警告</div><div class="sk-diag-body hidden"></div>`;
+  const body = diag.querySelector(".sk-diag-body");
+  for (const w of warnings) body.appendChild(el(`<div>${esc(w)}</div>`));
+  diag.querySelector(".sk-diag-head").onclick = () => {
+    const nowHidden = body.classList.toggle("hidden");
+    diag.querySelector(".sk-diag-chev").textContent = nowHidden ? "▸" : "▾";
+  };
+}
+
+function skillRow({ skill, scope, scopeLabel }, disabledSet) {
+  const enabled = !disabledSet.has(skill.name);
+  const row = el(`<div class="sk-row">
+      <span class="sk-icon">◈</span>
+      <div class="sk-text">
+        <div class="sk-name">${esc(skill.name)}</div>
+        <div class="sk-desc">${esc(skill.description)}</div>
+      </div>
+      <span class="sk-badge">${esc(scopeLabel)}</span>
+      <span class="ap-toggle${enabled ? " on" : ""}" title="${enabled ? "已启用" : "已禁用"}"><span class="knob"></span></span>
+      ${scope === "personal" ? `<span class="icon-btn sk-del" title="删除">🗑</span>` : ""}
+    </div>`);
+  row.onclick = () => openSkillDetail(skill, scopeLabel, enabled);
+  const toggle = row.querySelector(".ap-toggle");
+  toggle.onclick = async (ev) => {
+    ev.stopPropagation();
+    await refreshSkillsSettings(await api.setSkillEnabled(skill.name, !enabled));
+  };
+  // 删除仅限个人技能（项目技能属项目仓库文件，去仓库里改）；两步确认
+  const delBtn = row.querySelector(".sk-del");
+  if (delBtn) {
+    let armed = false;
+    delBtn.onclick = async (ev) => {
+      ev.stopPropagation();
+      if (!armed) {
+        armed = true;
+        delBtn.textContent = "确认删除?";
+        return;
+      }
+      const r = await api.removeSkill(skill.file);
+      if (r.ok) await refreshSkillsSettings(r.view);
+      else {
+        delBtn.textContent = "🗑";
+        armed = false;
+      }
+    };
+  }
+  return row;
+}
+
+function openSkillDetail(skill, scopeLabel, enabled) {
+  $("skd-name").textContent = skill.name;
+  $("skd-desc").textContent = skill.description;
+  $("skd-scope").textContent = scopeLabel;
+  $("skd-status").textContent = enabled ? "已启用" : "已禁用";
+  $("skd-path").textContent = skill.file ?? "";
+  $("skd-open").onclick = () => api.openSkillFile(skill.file);
+  $("skd-backdrop").classList.remove("hidden");
+}
+
+function bindSkillsSettings() {
+  $("sk-refresh").onclick = () => refreshSkillsSettings();
+  $("sk-search").oninput = () => {
+    S.skillsQuery = $("sk-search").value.trim();
+    renderSkillsSettings();
+  };
+  $("sk-scope").onchange = () => {
+    S.skillsScope = $("sk-scope").value;
+    renderSkillsSettings();
+  };
+  $("skd-close").onclick = () => $("skd-backdrop").classList.add("hidden");
+  $("skd-backdrop").onmousedown = (e) => {
+    if (e.target.id === "skd-backdrop") $("skd-backdrop").classList.add("hidden");
+  };
+  $("sk-new").onclick = () => {
+    $("skn-name").value = "";
+    $("skn-msg").textContent = "";
+    $("skn-backdrop").classList.remove("hidden");
+    $("skn-name").focus();
+  };
+  const closeNew = () => $("skn-backdrop").classList.add("hidden");
+  $("skn-close").onclick = closeNew;
+  $("skn-cancel").onclick = closeNew;
+  $("skn-create").onclick = async () => {
+    const r = await api.createSkill($("skn-name").value.trim());
+    if (!r.ok) {
+      $("skn-msg").textContent = r.error;
+      return;
+    }
+    closeNew();
+    await refreshSkillsSettings(r.view);
+    api.openSkillFile(r.file);
+  };
 }
 
 /* ---------------- + 插入菜单与附件 ---------------- */

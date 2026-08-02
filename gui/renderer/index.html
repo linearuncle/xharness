@@ -132,6 +132,7 @@
       <div class="sb-item active" id="set-nav-models" data-page="models"><span class="ic">▤</span>模型设置</div>
       <div class="sb-item" id="set-nav-appearance" data-page="appearance"><span class="ic">☀</span>外观</div>
       <div class="sb-item" id="set-nav-plugins" data-page="plugins"><span class="ic">🧩</span>插件</div>
+      <div class="sb-item" id="set-nav-skills" data-page="skills"><span class="ic">⚡</span>技能</div>
       <div class="sb-item" id="set-nav-general" data-page="general"><span class="ic">⚙</span>通用</div>
     </aside>
     <main id="set-main">
@@ -157,6 +158,22 @@
         <div class="ap-editor"><div class="ap-editor-body" id="general-compaction-rows"><!-- app.js 动态渲染 --></div></div>
         <div class="ap-section-label">会话统计</div>
         <div class="ap-editor"><div class="ap-editor-body" id="general-stats-rows"><!-- app.js 动态渲染 --></div></div>
+      </div>
+      <div id="set-page-skills" class="set-page hidden">
+        <h1>技能</h1>
+        <p class="set-desc">管理个人（~/.agents/skills）与项目级技能。聊天中输入 /技能名 触发，或由模型经 Skill 工具调用；启停对新会话生效。</p>
+        <div class="sk-toolbar">
+          <div class="sk-search">⌕<input id="sk-search" placeholder="搜索技能…" /></div>
+          <select id="sk-scope">
+            <option value="all">全部</option>
+            <option value="personal">个人</option>
+            <option value="project">项目</option>
+          </select>
+          <span class="icon-btn" id="sk-new" title="新建技能">＋</span>
+          <span class="icon-btn" id="sk-refresh" title="刷新">⟳</span>
+        </div>
+        <div id="sk-diag" class="hidden"></div>
+        <div id="sk-groups"></div>
       </div>
       <div id="set-page-plugins" class="set-page hidden">
         <h1>插件</h1>
@@ -205,6 +222,36 @@
         <span class="env-hint" id="pg-msg"></span>
         <button class="btn" id="pg-cancel">取消</button>
         <button class="btn primary" id="pg-install">安装</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 技能详情弹窗 -->
+  <div id="skd-backdrop" class="hidden">
+    <div id="skd-dialog">
+      <div class="md-title"><span id="skd-name"></span><span class="icon-btn" id="skd-close">✕</span></div>
+      <label>描述</label>
+      <div class="skd-desc" id="skd-desc"></div>
+      <div class="skd-grid">
+        <div><label>范围</label><div class="skd-val" id="skd-scope"></div></div>
+        <div><label>状态</label><div class="skd-val" id="skd-status"></div></div>
+      </div>
+      <label>文件路径</label>
+      <div class="skd-path"><span id="skd-path"></span><span class="icon-btn" id="skd-open" title="用默认编辑器打开">↗</span></div>
+    </div>
+  </div>
+
+  <!-- 新建技能弹窗 -->
+  <div id="skn-backdrop" class="hidden">
+    <div id="skn-dialog">
+      <div class="md-title">新建技能 <span class="icon-btn" id="skn-close">✕</span></div>
+      <label>技能名</label>
+      <input id="skn-name" placeholder="如 commit-helper（字母、数字、点、下划线、连字符）" />
+      <p class="env-hint">将在 ~/.agents/skills/&lt;技能名&gt;/ 下创建 SKILL.md 模板并用默认编辑器打开。</p>
+      <div class="md-actions">
+        <span class="env-hint" id="skn-msg"></span>
+        <button class="btn" id="skn-cancel">取消</button>
+        <button class="btn primary" id="skn-create">创建</button>
       </div>
     </div>
   </div>
