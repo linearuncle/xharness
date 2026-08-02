@@ -195,7 +195,10 @@ function renderStoredBlock(list, b) {
     list.appendChild(el(`<div class="turn-meta">已处理${b.elapsed ? " " + b.elapsed + "s" : ""}</div>`));
   } else if (b.kind === "assistant") {
     const d = el(`<div class="assistant"></div>`);
-    api.renderMarkdown(b.text).then((h) => (d.innerHTML = DOMPurify.sanitize(h)));
+    api.renderMarkdown(b.text).then((h) => {
+      d.innerHTML = DOMPurify.sanitize(h);
+      renderSvgPreviews(d);
+    });
     list.appendChild(d);
   } else if (b.kind === "tool") {
     list.appendChild(toolLineEl(b.summary, b.isError));
@@ -327,6 +330,27 @@ async function finalRenderSeg(segEl, text) {
     morphHtml(stream, html);
   } else {
     segEl.innerHTML = html;
+  }
+  renderSvgPreviews(segEl);
+}
+
+// SVG 代码块探测：围栏语言标了 svg，或代码内容本身就是 <svg> 文档（兼容 ```xml
+// 与未标语言的自动检测块）。命中则在代码块下方插入实际渲染的图形。
+// 模型输出不可信：插入前过 DOMPurify 的 SVG profile（剥 script/事件/foreignObject）。
+function renderSvgPreviews(container) {
+  for (const code of container.querySelectorAll("pre > code")) {
+    const src = code.textContent;
+    const isSvg =
+      /\blanguage-svg\b/.test(code.className) ||
+      /^\s*(<\?xml[\s\S]*?\?>\s*)?<svg[\s>]/i.test(src);
+    if (!isSvg) continue;
+    const pre = code.parentElement;
+    if (pre.nextElementSibling?.classList.contains("svg-preview")) continue;
+    const clean = DOMPurify.sanitize(src, { USE_PROFILES: { svg: true, svgFilters: true } });
+    if (!/<svg[\s>]/i.test(clean)) continue; // 消毒后不剩 svg 文档（半截代码等），跳过
+    const box = el(`<div class="svg-preview"></div>`);
+    box.innerHTML = clean;
+    pre.after(box);
   }
 }
 
