@@ -61,7 +61,7 @@ function renderSidebar() {
   wrap.innerHTML = "";
   for (const p of sb.projects) {
     const row = document.createElement("div");
-    row.className = "sb-project";
+    row.className = "sb-project" + (p.dir === S.activeProject ? " active" : "");
     row.innerHTML = `<span class="ic">🗂</span><span>${esc(p.name)}</span>`;
     row.onclick = () => selectProject(p.dir);
     wrap.appendChild(row);
