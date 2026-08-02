@@ -1219,7 +1219,7 @@ async function renderProviderDetail() {
   const urlInput = field("Base URL", `<input type="text" placeholder="https://api.example.com/anthropic" value="${esc(work.baseUrl)}" />`);
   urlInput.oninput = () => (work.baseUrl = urlInput.value.trim());
 
-  const formatSelect = field("API 格式", `<select>
+  const formatSelect = field("API 格式", `<select id="pd-api-format">
       <option value="anthropic">Anthropic Messages (/v1/messages)</option>
       <option value="openai-responses">OpenAI Responses (/v1/responses)</option>
     </select>`);
