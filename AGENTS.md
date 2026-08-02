@@ -96,6 +96,10 @@ tool_use/tool_result 配对中间则**向旧侧扩窗**（宁多保留不拆对�
   （click 阶段若菜单内容已被重建，`contains()` 会误判为外部点击）。
 - 打包脚本复制 .app 必须用 `ditto`（cpSync 破坏框架符号链接导致 codesign 失败）；
   打包版内置 ripgrep 于 Resources/bin 并置于 PATH 首位（Finder 启动不继承 shell PATH）。
+- 打包脚本里的清单类配置**禁止手写枚举**，一律整体继承来源（如 staging 依赖用
+  `{ ...rootPkg.dependencies, ...guiPkg.dependencies }`）——曾因硬编码两个包名，
+  后续新增的 marked-highlight/highlight.js/morphdom 漏进包，安装版启动即崩（v0.0.3 热修）。
+  新增 GUI 运行时依赖后必须重打包并实测 `open release/xharness.app` 能启动。
 
 ## 项目约定
 
