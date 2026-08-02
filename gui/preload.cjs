@@ -26,6 +26,8 @@ contextBridge.exposeInMainWorld("api", {
   setVibrancy: (enabled) => ipcRenderer.invoke("appearance:vibrancy", enabled),
   getProviderKey: (id) => ipcRenderer.invoke("settings:getProviderKey", id),
   syncCatalog: () => ipcRenderer.invoke("catalog:sync"),
+  fetchProviderModels: (baseUrl, apiKey) =>
+    ipcRenderer.invoke("models:fetch", { baseUrl, apiKey }),
   getCatalogInfo: () => ipcRenderer.invoke("catalog:info"),
   onProvidersUpdate: (fn) =>
     ipcRenderer.on("providers:update", (_e, providers) => fn(providers)),

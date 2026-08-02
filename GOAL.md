@@ -350,6 +350,14 @@ description 文本是工具质量的核心，须参照 Claude Code 的措辞风�
   `providers:update` 事件推送渲染层即时刷新。自定义供应商仍手工管理。
 - store 的种子数据仅作首启与离线兜底，engine 的 DEFAULT_MODEL_PRICING 仅作
   无目录数据时的回退。
+- **自定义供应商"从接口获取"**（2026-08-02 同期）：详情页在手工"添加模型"旁提供
+  "从接口获取"——`GET /v1/models`（OpenAI/Anthropic 兼容端点普遍支持），路径回退
+  `{base}/v1/models → {origin}/v1/models`（DeepSeek 的 /anthropic 前缀下无此端点、
+  根路径才有，实测），鉴权双试 Bearer → x-api-key；响应兼容 `{data:[…]}`/
+  `{models:[…]}` 两种形状，端点返回的 `context_length/context_window` 优先，缺参数
+  按模型 id 查 models.dev 全目录紧凑索引补齐（同名多家时优先 baseUrl 主机名匹配的
+  供应商）；勾选弹窗合入草稿（已有模型标记禁选），窗口未知按可编辑的缺省值
+  （默认 200K）计，点保存才落盘。端点不支持时明确提示改手工添加。
 
 ## 5. Tranche 划分（PM 按序推进，每个 tranche 结束交 Judge 审）
 

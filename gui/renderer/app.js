@@ -1202,7 +1202,7 @@ async function renderProviderDetail() {
   const modelList = el(`<div></div>`);
   box.appendChild(modelList);
   const fmtCtx = (n) =>
-    n >= 1_000_000 ? n / 1_000_000 + "M" : Math.round(n / 1000) + "K";
+    n >= 1_000_000 ? (n / 1_000_000).toFixed(n % 1_000_000 ? 1 : 0) + "M" : Math.round(n / 1000) + "K";
   const renderModels = () => {
     modelList.innerHTML = "";
     for (const mod of work.models) {
@@ -1254,13 +1254,19 @@ async function renderProviderDetail() {
       }
     };
   } else {
-    const addModelBtn = el(`<button class="btn">＋ 添加模型</button>`);
-    box.appendChild(addModelBtn);
-    addModelBtn.onclick = () => openModelDialog((id, ctx, pricing) => {
+    const btnRow = el(`<div class="catalog-sync-row">
+        <button class="btn" id="pd-add-model">＋ 添加模型</button>
+        <button class="btn" id="pd-fetch-models">⇣ 从接口获取</button>
+        <span class="env-hint" id="pd-fetch-msg"></span>
+      </div>`);
+    box.appendChild(btnRow);
+    btnRow.querySelector("#pd-add-model").onclick = () => openModelDialog((id, ctx, pricing) => {
       if (work.models.some((x) => x.id === id)) return;
       work.models.push({ id, contextWindow: ctx, ...(pricing ? { pricing } : {}) });
       renderModels();
     });
+    btnRow.querySelector("#pd-fetch-models").onclick = () =>
+      openModelsFetchDialog(work, renderModels, btnRow.querySelector("#pd-fetch-msg"));
   }
 
   // 保存
@@ -1280,6 +1286,68 @@ async function renderProviderDetail() {
     renderProviderDetail();
     const msg = box.querySelector("#pd-msg");
     if (msg) msg.textContent = "已保存 ✓";
+  };
+}
+
+/* 从接口获取模型弹窗：GET /v1/models（缺参数按 models.dev 索引补齐；
+ * 端点不支持时提示手工添加）。添加进 work（草稿），点保存才落盘。 */
+async function openModelsFetchDialog(work, renderModels, msgEl) {
+  if (!work.baseUrl) {
+    msgEl.textContent = "请先填写 Base URL";
+    return;
+  }
+  const fmtCtx = (n) =>
+    n >= 1_000_000 ? (n / 1_000_000).toFixed(n % 1_000_000 ? 1 : 0) + "M" : Math.round(n / 1000) + "K";
+  const backdrop = $("mf-backdrop");
+  const list = $("mf-list");
+  const status = $("mf-status");
+  msgEl.textContent = "";
+  list.innerHTML = "";
+  status.textContent = `正在请求 ${work.baseUrl} 的 /v1/models …`;
+  backdrop.classList.remove("hidden");
+  const close = () => backdrop.classList.add("hidden");
+  $("mf-close").onclick = close;
+  $("mf-cancel").onclick = close;
+  $("mf-add").disabled = true;
+
+  const r = await api.fetchProviderModels(work.baseUrl, work.apiKey || "");
+  if (!r.ok) {
+    status.textContent = r.error ?? "获取失败";
+    return;
+  }
+  status.textContent = `来自 ${r.source} · 共 ${r.models.length} 个模型（窗口/定价缺失时已尝试用 models.dev 补齐）`;
+  const rows = [];
+  for (const m of r.models) {
+    const exists = work.models.some((x) => x.id === m.id);
+    const row = el(`<label class="mf-row${exists ? " mf-exists" : ""}">
+        <input type="checkbox" ${exists ? "disabled" : "checked"} />
+        <span class="mf-id">${esc(m.id)}</span>
+        ${m.pricing ? `<span class="ctx-badge">$${m.pricing.input}/$${m.pricing.output}</span>` : ""}
+        <span class="ctx-badge">${m.contextWindow ? fmtCtx(m.contextWindow) : "窗口未知"}</span>
+        ${exists ? `<span class="ctx-badge">已添加</span>` : ""}
+      </label>`);
+    rows.push({ row, model: m, exists });
+    list.appendChild(row);
+  }
+  const boxes = () => rows.filter((x) => !x.exists).map((x) => x.row.querySelector("input"));
+  $("mf-all").onclick = () => boxes().forEach((b) => (b.checked = true));
+  $("mf-none").onclick = () => boxes().forEach((b) => (b.checked = false));
+  const addBtn = $("mf-add");
+  addBtn.disabled = false;
+  addBtn.onclick = () => {
+    const fallbackCtx = parseInt($("mf-ctx").value, 10);
+    const ctxDefault = Number.isFinite(fallbackCtx) && fallbackCtx > 0 ? fallbackCtx : 200_000;
+    for (const { row, model, exists } of rows) {
+      if (exists || !row.querySelector("input").checked) continue;
+      work.models.push({
+        id: model.id,
+        contextWindow: model.contextWindow ?? ctxDefault,
+        ...(model.pricing ? { pricing: model.pricing } : {}),
+      });
+    }
+    renderModels();
+    msgEl.textContent = "已加入列表，记得点保存生效";
+    close();
   };
 }
 
