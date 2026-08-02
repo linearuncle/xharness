@@ -45,8 +45,9 @@ const THEME_PRESETS = [
     dark: { accent: "#7aa2f7", background: "#1a1b26", foreground: "#c0caf5" } },
 ];
 
-const DEFAULT_UI_FONT = `-apple-system, "PingFang SC", "Helvetica Neue", sans-serif`;
-const DEFAULT_CODE_FONT = `"SF Mono", ui-monospace, Menlo, Consolas, monospace`;
+// 对齐 ChatGPT Atlas 桌面端的默认栈：系统字体（macOS = SF Pro，中文回落苹方）+ SF Mono
+const DEFAULT_UI_FONT = `-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", sans-serif`;
+const DEFAULT_CODE_FONT = `ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace`;
 
 /* ---------- 颜色工具 ---------- */
 

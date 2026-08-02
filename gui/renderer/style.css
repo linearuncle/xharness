@@ -22,8 +22,8 @@
   --link: #0969da;
   --shadow: rgba(0, 0, 0, .1);
   --accent-orange: #e8590c;
-  --font-ui: -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
-  --font-code: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", sans-serif;
+  --font-code: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   --sb-bg-translucent: rgba(247, 247, 245, .6);
 }
 /* 首帧兜底：深色系统下 JS 应用主题前（约几十 ms）按默认深色主题上色，避免闪白。
