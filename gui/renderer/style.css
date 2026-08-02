@@ -854,3 +854,55 @@ body::after {
 /* 模型弹窗：三格定价输入 */
 .md-price-row { display: flex; gap: 8px; }
 .md-price-row input { flex: 1; min-width: 0; }
+
+/* xAI (Grok) OAuth 登录区 */
+.prov-row .prov-ic { display: inline-flex; width: 16px; justify-content: center; align-items: center; color: var(--text-2); }
+.prov-row .prov-ic svg { width: 14px; height: 14px; }
+.oauth-box {
+  border: 1px solid var(--card-border); border-radius: 10px;
+  padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;
+  background: var(--panel);
+}
+.oauth-status { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--text); }
+.oauth-status .dot { width: 8px; height: 8px; border-radius: 4px; }
+.oauth-status .dot.on { background: #22c55e; }
+.oauth-status .dot.err { background: #ef4444; }
+.oauth-code {
+  font-size: 13px; color: var(--text-2); line-height: 1.7;
+  background: var(--code-bg); border-radius: 8px; padding: 10px 12px;
+}
+.oauth-usercode {
+  font-family: var(--font-code); font-size: 16px; font-weight: 700;
+  color: var(--text); letter-spacing: 2px; margin-left: 4px;
+}
+.oauth-actions { display: flex; align-items: center; gap: 10px; }
+
+/* 模型目录同步行 */
+.catalog-sync-row { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+
+/* 从接口获取模型弹窗 */
+#mf-backdrop {
+  position: fixed; inset: 0; z-index: 80; background: rgba(0,0,0,.28);
+  display: flex; align-items: center; justify-content: center;
+}
+#mf-dialog {
+  background: var(--panel); border-radius: 14px; width: 480px; padding: 20px 22px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.2); display: flex; flex-direction: column;
+}
+#mf-dialog .md-title { font-size: 15px; font-weight: 700; display: flex; justify-content: space-between; margin-bottom: 6px; }
+#mf-list { max-height: 320px; overflow-y: auto; margin-top: 10px; display: flex; flex-direction: column; gap: 2px; }
+.mf-row {
+  display: flex; align-items: center; gap: 10px; padding: 7px 8px;
+  border-radius: 8px; font-size: 13.5px; cursor: pointer;
+}
+.mf-row:hover { background: var(--hover); }
+.mf-row input[type="checkbox"] { accent-color: var(--accent); }
+.mf-row .mf-id { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mf-row .ctx-badge { flex: none; }
+.mf-row.mf-exists { opacity: .5; }
+.mf-fallback { margin-top: 10px; display: flex; align-items: center; gap: 6px; }
+.mf-fallback input {
+  width: 90px; padding: 4px 8px; border: 1px solid var(--card-border);
+  border-radius: 7px; font: inherit; font-size: 12.5px; outline: none;
+  background: var(--panel); color: var(--text);
+}

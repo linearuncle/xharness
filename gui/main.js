@@ -10,6 +10,8 @@ import { markedHighlight } from "marked-highlight";
 import hljs from "highlight.js";
 import * as store from "./store.js";
 import * as engine from "./engine.js";
+import * as oauthXai from "./oauth-xai.js";
+import { syncModelCatalog, lastSyncedAt, lookupModelInfo } from "./model-catalog.js";
 import { loadPlugins } from "../dist/plugins/loader.js";
 import { scanSkillsDir } from "../dist/skills/loader.js";
 import {
@@ -177,6 +179,16 @@ app.whenReady().then(async () => {
     }
   });
   createWindow();
+
+  // 模型目录自动同步（models.dev，24h TTL）：启动后台执行，有变更即推送渲染层；
+  // 失败静默（离线用缓存/种子），永不阻塞启动
+  syncModelCatalog()
+    .then((r) => {
+      if (r.changed) {
+        win?.webContents.send("providers:update", store.getProvidersSafe());
+      }
+    })
+    .catch(() => {});
 });
 
 app.on("window-all-closed", () => app.quit());
@@ -249,6 +261,123 @@ ipcMain.handle("yolo:ack", () => {
 ipcMain.handle("settings:get", () => ({
   providers: store.getProvidersSafe(),
 }));
+
+// 手动"立即同步"模型目录（设置页按钮）
+ipcMain.handle("catalog:sync", async () => {
+  const r = await syncModelCatalog({ force: true });
+  return { ...r, providers: store.getProvidersSafe() };
+});
+
+ipcMain.handle("catalog:info", () => ({ fetchedAt: lastSyncedAt() }));
+
+// 从供应商端点拉模型列表（GET /v1/models，OpenAI/Anthropic 兼容端点普遍支持）。
+// 路径回退：{base}/v1/models → {origin}/v1/models（DeepSeek 的 /anthropic 前缀
+// 下无此端点，根路径才有——实测）；鉴权双试：Bearer → x-api-key。
+// 端点返回的 context_length/context_window 优先，缺参数按 id 查 models.dev 索引补齐。
+ipcMain.handle("models:fetch", async (_e, { baseUrl, apiKey }) => {
+  let base;
+  try {
+    base = new URL(baseUrl);
+    if (base.protocol !== "https:" && base.protocol !== "http:") throw new Error();
+  } catch {
+    return { ok: false, error: "Base URL 无效" };
+  }
+  const trimmed = base.href.replace(/\/+$/, "");
+  const candidates = [
+    trimmed.endsWith("/v1") ? `${trimmed}/models` : `${trimmed}/v1/models`,
+    `${base.origin}/v1/models`,
+  ].filter((u, i, arr) => arr.indexOf(u) === i);
+  const authHeaders = apiKey
+    ? [
+        { authorization: `Bearer ${apiKey}` },
+        { "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+      ]
+    : [{}];
+
+  let lastError = "端点无响应";
+  for (const url of candidates) {
+    for (const headers of authHeaders) {
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 8000);
+        const response = await fetch(url, { headers, signal: controller.signal });
+        clearTimeout(timer);
+        if (!response.ok) {
+          lastError = `HTTP ${response.status}`;
+          continue;
+        }
+        const data = await response.json().catch(() => null);
+        const list = Array.isArray(data?.data) ? data.data : Array.isArray(data?.models) ? data.models : null;
+        if (!list) {
+          lastError = "响应不是模型列表格式";
+          continue;
+        }
+        const models = [];
+        for (const item of list) {
+          const id = typeof item?.id === "string" ? item.id : typeof item?.name === "string" ? item.name : null;
+          if (!id) continue;
+          const ctxFromApi =
+            typeof item?.context_length === "number" ? item.context_length
+            : typeof item?.context_window === "number" ? item.context_window
+            : null;
+          const catalogInfo = lookupModelInfo(id, baseUrl);
+          models.push({
+            id,
+            contextWindow: ctxFromApi ?? catalogInfo?.contextWindow ?? null,
+            ...(catalogInfo?.pricing ? { pricing: catalogInfo.pricing } : {}),
+          });
+        }
+        if (models.length === 0) {
+          lastError = "端点返回了空模型列表";
+          continue;
+        }
+        return { ok: true, models, source: url };
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : String(err);
+      }
+    }
+  }
+  return { ok: false, error: `无法获取模型列表（${lastError}）；该端点可能不支持 /v1/models，请手工添加` };
+});
+
+// ---------- xAI (Grok) OAuth 设备码登录 ----------
+
+let xaiLoginAbort = null;
+
+// 全程一个 invoke：申请设备码 → 经事件把 userCode 发给渲染层展示 → 开浏览器 →
+// 轮询到用户完成授权 → 凭据落盘。渲染层 await 结果；取消经 oauth:xai:cancel。
+ipcMain.handle("oauth:xai:login", async () => {
+  xaiLoginAbort?.abort();
+  const abort = new AbortController();
+  xaiLoginAbort = abort;
+  try {
+    const device = await oauthXai.startDeviceFlow(abort.signal);
+    win?.webContents.send("oauth:xai:code", {
+      userCode: device.userCode,
+      verificationUri: device.verificationUriComplete ?? device.verificationUri,
+    });
+    // 验证地址已在 startDeviceFlow 强制为 https，可安全交给系统浏览器
+    shell.openExternal(device.verificationUriComplete ?? device.verificationUri);
+    const credential = await oauthXai.pollForTokens(device, abort.signal);
+    store.setProviderOAuth("grok", credential);
+    return { ok: true, providers: store.getProvidersSafe() };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  } finally {
+    if (xaiLoginAbort === abort) xaiLoginAbort = null;
+  }
+});
+
+ipcMain.handle("oauth:xai:cancel", () => {
+  xaiLoginAbort?.abort();
+  xaiLoginAbort = null;
+  return true;
+});
+
+ipcMain.handle("oauth:xai:logout", () => {
+  store.clearProviderOAuth("grok");
+  return { providers: store.getProvidersSafe() };
+});
 
 // 设置详情回填用：列表仍脱敏，仅按 id 取 key（主进程明文）
 ipcMain.handle("settings:getProviderKey", (_e, id) => {

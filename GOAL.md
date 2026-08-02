@@ -307,6 +307,58 @@ description 文本是工具质量的核心，须参照 Claude Code 的措辞风�
 - 验收：单测覆盖 client usage 采集/无 usage 不发事件；实测 DeepSeek Anthropic 端点
   两处 usage 字段均回报（2026-08-02 curl 验证）。
 
+### 4.8 Grok（xAI）OAuth 供应商（2026-08-02 立项，移植自 pi-mono）
+
+- **接入方式**：设备码流程（RFC 8628，移植 pi-mono `packages/ai/src/auth/oauth/xai.ts`
+  与 `device-code.ts`），面向 SuperGrok / X Premium 订阅账号，无需 API Key。
+  端点：`auth.x.ai/oauth2/device/code` + `/oauth2/token`，client_id 沿用 pi 公开
+  客户端（`b1a00492-…`，公共客户端 id 非机密），referrer=xharness（实测接受）。
+  流程：申请设备码 → GUI 展示 user_code + 自动开浏览器（验证地址强制 https）→
+  RFC 8628 轮询（authorization_pending 续等 / slow_down 加 5s / denied、expired
+  终止）→ 凭据 `{access, refresh, expires}` 落盘。
+- **API 调用**：api.x.ai 原生支持 Anthropic Messages 格式（实测 `/v1/messages`），
+  Base URL `https://api.x.ai`，与既有 client 完全兼容；OAuth access token 走
+  `Authorization: Bearer`（`Config.authToken`，client.ts 里 authToken 设置时
+  apiKey 传 null）。请求前 token 剩余有效期不足（提前 5 分钟）即用 refresh token
+  刷新并落盘（refresh 未轮换时沿用旧值）；刷新失败提示重新登录。
+- **存储**：内置供应商 `grok`（`authType:"oauth-xai"`，builtin），oauth 凭据与
+  apiKey 同级敏感——明文存 settings.jsonl（既有决策，权限 600），变更走整文件
+  重写；IPC 脱敏视图剥离 oauth，仅暴露 hasKey；普通"保存"不携带 oauth 字段时
+  沿用已存凭据（防止保存表单清掉登录态）。
+- **GUI**：设置 → 模型设置的 Grok 详情页以"账号"登录区替代 API Key 输入
+  （登录/重新登录/退出登录 + 设备码展示区）；供应商列表 Grok 行使用 lobehub
+  Grok 图标（MIT，currentColor 随主题）。内置模型：grok-4.3（2M 窗口，含官方
+  定价 $1.25/$2.5/命中 $0.2）、grok-4.5（2M）、grok-4.1-fast（1M）。
+- engine 的 config 拆分：`configMeta`（同步、无鉴权，statsEvent/sessionMeta 用）
+  与 `config`（异步、含 resolveAuth）。CLI 不接入 OAuth（环境变量 key 路径不变）。
+
+### 4.9 模型目录自动同步（2026-08-02 立项，思路来自 pi 的 generate-models）
+
+- **零手工维护**：内置供应商（deepseek→models.dev `deepseek`、grok→`xai`）的
+  模型列表/上下文窗口/分项定价运行时自动来自 https://models.dev/api.json
+  （pi 在构建期生成静态目录，我们改为运行时拉取）。
+- **同步机制**（`gui/model-catalog.js`）：GUI 启动后台异步同步（24h TTL 缓存于
+  数据目录 `models-catalog.json`，仅存所需供应商子集）；设置页"立即同步"按钮
+  强制刷新；拉取失败静默回退缓存→种子数据，离线永不破坏可用性；有实际差异才
+  写 settings（幂等）。过滤规则同 pi：仅 `tool_call === true` 且窗口 ≥8K 的模型。
+- **分层定价**：pricing 结构扩展 `tiers: [{inputTokensAbove, input, output,
+  cacheRead}]`（models.dev context tier 归一化），engine 计费按本次调用完整
+  prompt 命中的最高档整体计价（pi calculateCost 同款语义，如 grok-4.3 超 200K
+  翻倍）。
+- **GUI**：内置供应商模型列表只读（无删除/添加按钮），每行显示 `$in/$out` 定价
+  徽标（tooltip 含缓存命中价与分层提示）+ 同步状态行；后台同步有变更时经
+  `providers:update` 事件推送渲染层即时刷新。自定义供应商仍手工管理。
+- store 的种子数据仅作首启与离线兜底，engine 的 DEFAULT_MODEL_PRICING 仅作
+  无目录数据时的回退。
+- **自定义供应商"从接口获取"**（2026-08-02 同期）：详情页在手工"添加模型"旁提供
+  "从接口获取"——`GET /v1/models`（OpenAI/Anthropic 兼容端点普遍支持），路径回退
+  `{base}/v1/models → {origin}/v1/models`（DeepSeek 的 /anthropic 前缀下无此端点、
+  根路径才有，实测），鉴权双试 Bearer → x-api-key；响应兼容 `{data:[…]}`/
+  `{models:[…]}` 两种形状，端点返回的 `context_length/context_window` 优先，缺参数
+  按模型 id 查 models.dev 全目录紧凑索引补齐（同名多家时优先 baseUrl 主机名匹配的
+  供应商）；勾选弹窗合入草稿（已有模型标记禁选），窗口未知按可编辑的缺省值
+  （默认 200K）计，点保存才落盘。端点不支持时明确提示改手工添加。
+
 ## 5. Tranche 划分（PM 按序推进，每个 tranche 结束交 Judge 审）
 
 | Tranche | 内容 | 出口标准 |

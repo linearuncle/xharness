@@ -259,7 +259,10 @@ export function createApiClientFromStreamFn(
 
 export function createApiClient(config: Config): ApiClient {
   const sdk = new Anthropic({
-    apiKey: config.apiKey,
+    // authToken 设置时走 Authorization: Bearer（OAuth access token），
+    // 此时 apiKey 必须为 null 以免 SDK 同时发 x-api-key
+    apiKey: config.authToken ? null : config.apiKey,
+    authToken: config.authToken ?? null,
     baseURL: config.baseUrl,
     maxRetries: 0,
   });

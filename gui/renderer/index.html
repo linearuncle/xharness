@@ -191,6 +191,23 @@
     </main>
   </div>
 
+  <!-- 从接口获取模型弹窗 -->
+  <div id="mf-backdrop" class="hidden">
+    <div id="mf-dialog">
+      <div class="md-title">从接口获取模型 <span class="icon-btn" id="mf-close">✕</span></div>
+      <div class="env-hint" id="mf-status"></div>
+      <div id="mf-list"></div>
+      <div class="mf-fallback env-hint">窗口未知的模型按 <input id="mf-ctx" type="number" value="200000" /> token 计</div>
+      <div class="md-actions">
+        <span class="ap-link" id="mf-all">全选</span>
+        <span class="ap-link" id="mf-none">全不选</span>
+        <span class="spacer"></span>
+        <button class="btn" id="mf-cancel">取消</button>
+        <button class="btn primary" id="mf-add">添加所选</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 添加模型弹窗 -->
   <div id="modal-backdrop" class="hidden">
     <div id="model-dialog">

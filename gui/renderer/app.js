@@ -827,6 +827,25 @@ async function boot() {
   if (first) await selectProject(first.dir);
 
   api.onAgentEvent(onAgentEvent);
+  // 模型目录后台同步完成：刷新供应商数据与设置页
+  api.onProvidersUpdate((providers) => {
+    S.providers = providers;
+    updateModelLabel();
+    if (document.body.classList.contains("settings-open")) {
+      renderProviderList();
+      renderProviderDetail();
+    }
+  });
+  // xAI OAuth：设备码到达时填充详情页的展示区（浏览器已由主进程打开）
+  api.onXaiCode(({ userCode, verificationUri }) => {
+    const area = $("xai-code-area");
+    if (!area) return;
+    area.innerHTML = `浏览器已打开授权页，请核对并确认代码：<span class="oauth-usercode">${esc(userCode)}</span><br/>
+      <span class="env-hint">若浏览器未打开，请手动访问 ${esc(verificationUri)}</span>`;
+    area.classList.remove("hidden");
+    const msg = $("xai-msg");
+    if (msg) msg.textContent = "等待浏览器授权完成…";
+  });
   api.onSidebarUpdate((sb) => { S.sidebar = sb; renderSidebar(); });
 
   $("btn-new-conv").onclick = newConversation;
@@ -1016,6 +1035,14 @@ function currentProvider() {
   return S.providers.find((p) => p.id === S.settings.activeProviderId) ?? null;
 }
 
+/* Grok 图标（lobehub icons，MIT；currentColor 跟随主题） */
+const GROK_ICON_SVG = `<svg fill="currentColor" fill-rule="evenodd" height="1em" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M9.27 15.29l7.978-5.897c.391-.29.95-.177 1.137.272.98 2.369.542 5.215-1.41 7.169-1.951 1.954-4.667 2.382-7.149 1.406l-2.711 1.257c3.889 2.661 8.611 2.003 11.562-.953 2.341-2.344 3.066-5.539 2.388-8.42l.006.007c-.983-4.232.242-5.924 2.75-9.383.06-.082.12-.164.179-.248l-3.301 3.305v-.01L9.267 15.292M7.623 16.723c-2.792-2.67-2.31-6.801.071-9.184 1.761-1.763 4.647-2.483 7.166-1.425l2.705-1.25a7.808 7.808 0 00-1.829-1A8.975 8.975 0 005.984 5.83c-2.533 2.536-3.33 6.436-1.962 9.764 1.022 2.487-.653 4.246-2.34 6.022-.599.63-1.199 1.259-1.682 1.925l7.62-6.815"></path></svg>`;
+
+function providerIconHtml(p) {
+  if (p.id === "grok") return `<span class="prov-ic">${GROK_ICON_SVG}</span>`;
+  return `<span class="prov-ic">🗄</span>`;
+}
+
 function renderProviderList() {
   const builtinEl = $("prov-builtin");
   const customEl = $("prov-custom");
@@ -1027,7 +1054,7 @@ function renderProviderList() {
   for (const p of rows) {
     const st = providerStatus(p);
     const r = el(
-      `<div class="prov-row${p.id === S.settings.activeProviderId ? " active" : ""}">🗄 <span>${esc(p.name || "未命名")}</span><span class="dot${st.dot}"></span></div>`
+      `<div class="prov-row${p.id === S.settings.activeProviderId ? " active" : ""}">${providerIconHtml(p)} <span>${esc(p.name || "未命名")}</span><span class="dot${st.dot}"></span></div>`
     );
     r.onclick = () => {
       if (S.settings.draft && p.id !== S.settings.draft.id) S.settings.draft = null;
@@ -1053,8 +1080,8 @@ async function renderProviderDetail() {
   const work = isDraft ? p : structuredClone(p); // 已存在的编辑基于副本，保存时落盘
   const renderForId = work.id;
 
-  // 列表 IPC 脱敏不带 key；编辑时单独取回并回填到输入框
-  if (!isDraft && work.hasKey && !work.apiKey) {
+  // 列表 IPC 脱敏不带 key；编辑时单独取回并回填到输入框（OAuth 供应商无手填 key，跳过）
+  if (!isDraft && work.hasKey && !work.apiKey && work.authType !== "oauth-xai") {
     box.innerHTML = `<div class="notice">加载中…</div>`;
     try {
       work.apiKey = (await api.getProviderKey(work.id)) || "";
@@ -1109,50 +1136,140 @@ async function renderProviderDetail() {
 
   field("API 格式", `<select disabled><option>Anthropic Messages (/v1/messages)</option></select>`);
 
-  // API Key：回填已保存值（password 默认隐藏，点眼睛可看明文）
-  box.appendChild(el(`<label>API Key</label>`));
-  const keyRow = el(`<div class="key-row">
-      <input type="password" placeholder="输入 API Key" value="${esc(work.apiKey || "")}" />
-      <span class="icon-btn" title="显示/隐藏">👁</span>
-    </div>`);
-  box.appendChild(keyRow);
-  const keyInp = keyRow.querySelector("input");
-  keyInp.oninput = () => {
-    work.apiKey = keyInp.value.trim();
-    applyProviderBadge(badgeEl, work);
-    if (isDraft) renderProviderList();
-  };
-  keyRow.querySelector(".icon-btn").onclick = () => {
-    keyInp.type = keyInp.type === "password" ? "text" : "password";
-  };
+  if (work.authType === "oauth-xai") {
+    // OAuth 型供应商：账号登录区替代 API Key（设备码流程，浏览器授权）
+    box.appendChild(el(`<label>账号</label>`));
+    const connected = !!work.hasKey;
+    const oauthBox = el(`<div class="oauth-box">
+        <div class="oauth-status">${
+          connected
+            ? `<span class="dot on"></span>已连接 Grok 账号（SuperGrok / X Premium）`
+            : `<span class="dot err"></span>未连接：使用 Grok/X 订阅账号授权，无需 API Key`
+        }</div>
+        <div class="oauth-code hidden" id="xai-code-area"></div>
+        <div class="oauth-actions">
+          <button class="btn primary" id="xai-login">${connected ? "重新登录" : "使用 Grok 账号登录"}</button>
+          ${connected ? `<button class="btn" id="xai-logout">退出登录</button>` : ""}
+          <span class="env-hint" id="xai-msg"></span>
+        </div>
+      </div>`);
+    box.appendChild(oauthBox);
+    const loginBtn = oauthBox.querySelector("#xai-login");
+    loginBtn.onclick = async () => {
+      loginBtn.disabled = true;
+      oauthBox.querySelector("#xai-msg").textContent = "正在申请设备码…";
+      const r = await api.xaiLogin();
+      // 登录窗口期间用户可能切走了详情页
+      if (S.settings.activeProviderId !== renderForId) return;
+      if (r.ok) {
+        S.providers = r.providers;
+        renderProviderList();
+        await renderProviderDetail();
+      } else {
+        loginBtn.disabled = false;
+        oauthBox.querySelector("#xai-code-area").classList.add("hidden");
+        oauthBox.querySelector("#xai-msg").textContent = r.error ?? "登录失败";
+      }
+    };
+    const logoutBtn = oauthBox.querySelector("#xai-logout");
+    if (logoutBtn)
+      logoutBtn.onclick = async () => {
+        const r = await api.xaiLogout();
+        S.providers = r.providers;
+        renderProviderList();
+        await renderProviderDetail();
+      };
+  } else {
+    // API Key：回填已保存值（password 默认隐藏，点眼睛可看明文）
+    box.appendChild(el(`<label>API Key</label>`));
+    const keyRow = el(`<div class="key-row">
+        <input type="password" placeholder="输入 API Key" value="${esc(work.apiKey || "")}" />
+        <span class="icon-btn" title="显示/隐藏">👁</span>
+      </div>`);
+    box.appendChild(keyRow);
+    const keyInp = keyRow.querySelector("input");
+    keyInp.oninput = () => {
+      work.apiKey = keyInp.value.trim();
+      applyProviderBadge(badgeEl, work);
+      if (isDraft) renderProviderList();
+    };
+    keyRow.querySelector(".icon-btn").onclick = () => {
+      keyInp.type = keyInp.type === "password" ? "text" : "password";
+    };
+  }
 
-  // 模型列表
+  // 模型列表：内置供应商由 models.dev 自动同步（只读），自定义供应商手工管理
+  const managed = !!work.builtin;
   box.appendChild(el(`<label>模型列表</label>`));
   const modelList = el(`<div></div>`);
   box.appendChild(modelList);
+  const fmtCtx = (n) =>
+    n >= 1_000_000 ? (n / 1_000_000).toFixed(n % 1_000_000 ? 1 : 0) + "M" : Math.round(n / 1000) + "K";
   const renderModels = () => {
     modelList.innerHTML = "";
     for (const mod of work.models) {
+      const price = mod.pricing
+        ? `<span class="ctx-badge" title="定价（美元/百万 token）：输入 $${mod.pricing.input} / 输出 $${mod.pricing.output}${mod.pricing.cacheRead !== undefined ? ` / 缓存命中 $${mod.pricing.cacheRead}` : ""}${mod.pricing.tiers?.length ? "（超长上下文分层加价）" : ""}">$${mod.pricing.input}/$${mod.pricing.output}</span>`
+        : "";
       const r = el(`<div class="model-row">
           <span>${esc(mod.id)}</span>
-          <span class="ctx-badge">${mod.contextWindow >= 1_000_000 ? (mod.contextWindow / 1_000_000) + "M" : Math.round(mod.contextWindow / 1000) + "K"}</span>
-          <span class="icon-btn" title="删除">🗑</span>
+          ${price}
+          <span class="ctx-badge">${fmtCtx(mod.contextWindow)}</span>
+          ${managed ? "" : `<span class="icon-btn" title="删除">🗑</span>`}
         </div>`);
-      r.querySelector(".icon-btn").onclick = () => {
-        work.models = work.models.filter((x) => x !== mod);
-        renderModels();
-      };
+      if (!managed) {
+        r.querySelector(".icon-btn").onclick = () => {
+          work.models = work.models.filter((x) => x !== mod);
+          renderModels();
+        };
+      }
       modelList.appendChild(r);
     }
   };
   renderModels();
-  const addModelBtn = el(`<button class="btn">＋ 添加模型</button>`);
-  box.appendChild(addModelBtn);
-  addModelBtn.onclick = () => openModelDialog((id, ctx, pricing) => {
-    if (work.models.some((x) => x.id === id)) return;
-    work.models.push({ id, contextWindow: ctx, ...(pricing ? { pricing } : {}) });
-    renderModels();
-  });
+  if (managed) {
+    const syncRow = el(`<div class="catalog-sync-row">
+        <span class="env-hint" id="catalog-hint">模型与定价每日自动从 models.dev 同步</span>
+        <button class="btn" id="catalog-sync">立即同步</button>
+      </div>`);
+    box.appendChild(syncRow);
+    api.getCatalogInfo().then(({ fetchedAt }) => {
+      const hint = syncRow.querySelector("#catalog-hint");
+      if (hint && fetchedAt) {
+        hint.textContent = `模型与定价每日自动从 models.dev 同步 · 上次 ${new Date(fetchedAt).toLocaleString()}`;
+      }
+    });
+    const syncBtn = syncRow.querySelector("#catalog-sync");
+    syncBtn.onclick = async () => {
+      syncBtn.disabled = true;
+      syncBtn.textContent = "同步中…";
+      const r = await api.syncCatalog();
+      S.providers = r.providers;
+      if (S.settings.activeProviderId !== renderForId) return;
+      if (r.synced) {
+        renderProviderList();
+        await renderProviderDetail();
+      } else {
+        syncBtn.disabled = false;
+        syncBtn.textContent = "立即同步";
+        syncRow.querySelector("#catalog-hint").textContent = `同步失败：${r.error ?? "网络不可用"}（继续使用本地数据）`;
+      }
+    };
+  } else {
+    const btnRow = el(`<div class="catalog-sync-row">
+        <button class="btn" id="pd-add-model">＋ 添加模型</button>
+        <button class="btn" id="pd-fetch-models">⇣ 从接口获取</button>
+        <span class="env-hint" id="pd-fetch-msg"></span>
+      </div>`);
+    box.appendChild(btnRow);
+    btnRow.querySelector("#pd-add-model").onclick = () => openModelDialog((id, ctx, pricing) => {
+      if (work.models.some((x) => x.id === id)) return;
+      work.models.push({ id, contextWindow: ctx, ...(pricing ? { pricing } : {}) });
+      renderModels();
+    });
+    btnRow.querySelector("#pd-fetch-models").onclick = () =>
+      openModelsFetchDialog(work, renderModels, btnRow.querySelector("#pd-fetch-msg"));
+  }
 
   // 保存
   const saveRow = el(`<div class="pd-save-row"><button class="btn primary">保存</button><span class="env-hint" id="pd-msg"></span></div>`);
@@ -1171,6 +1288,68 @@ async function renderProviderDetail() {
     renderProviderDetail();
     const msg = box.querySelector("#pd-msg");
     if (msg) msg.textContent = "已保存 ✓";
+  };
+}
+
+/* 从接口获取模型弹窗：GET /v1/models（缺参数按 models.dev 索引补齐；
+ * 端点不支持时提示手工添加）。添加进 work（草稿），点保存才落盘。 */
+async function openModelsFetchDialog(work, renderModels, msgEl) {
+  if (!work.baseUrl) {
+    msgEl.textContent = "请先填写 Base URL";
+    return;
+  }
+  const fmtCtx = (n) =>
+    n >= 1_000_000 ? (n / 1_000_000).toFixed(n % 1_000_000 ? 1 : 0) + "M" : Math.round(n / 1000) + "K";
+  const backdrop = $("mf-backdrop");
+  const list = $("mf-list");
+  const status = $("mf-status");
+  msgEl.textContent = "";
+  list.innerHTML = "";
+  status.textContent = `正在请求 ${work.baseUrl} 的 /v1/models …`;
+  backdrop.classList.remove("hidden");
+  const close = () => backdrop.classList.add("hidden");
+  $("mf-close").onclick = close;
+  $("mf-cancel").onclick = close;
+  $("mf-add").disabled = true;
+
+  const r = await api.fetchProviderModels(work.baseUrl, work.apiKey || "");
+  if (!r.ok) {
+    status.textContent = r.error ?? "获取失败";
+    return;
+  }
+  status.textContent = `来自 ${r.source} · 共 ${r.models.length} 个模型（窗口/定价缺失时已尝试用 models.dev 补齐）`;
+  const rows = [];
+  for (const m of r.models) {
+    const exists = work.models.some((x) => x.id === m.id);
+    const row = el(`<label class="mf-row${exists ? " mf-exists" : ""}">
+        <input type="checkbox" ${exists ? "disabled" : "checked"} />
+        <span class="mf-id">${esc(m.id)}</span>
+        ${m.pricing ? `<span class="ctx-badge">$${m.pricing.input}/$${m.pricing.output}</span>` : ""}
+        <span class="ctx-badge">${m.contextWindow ? fmtCtx(m.contextWindow) : "窗口未知"}</span>
+        ${exists ? `<span class="ctx-badge">已添加</span>` : ""}
+      </label>`);
+    rows.push({ row, model: m, exists });
+    list.appendChild(row);
+  }
+  const boxes = () => rows.filter((x) => !x.exists).map((x) => x.row.querySelector("input"));
+  $("mf-all").onclick = () => boxes().forEach((b) => (b.checked = true));
+  $("mf-none").onclick = () => boxes().forEach((b) => (b.checked = false));
+  const addBtn = $("mf-add");
+  addBtn.disabled = false;
+  addBtn.onclick = () => {
+    const fallbackCtx = parseInt($("mf-ctx").value, 10);
+    const ctxDefault = Number.isFinite(fallbackCtx) && fallbackCtx > 0 ? fallbackCtx : 200_000;
+    for (const { row, model, exists } of rows) {
+      if (exists || !row.querySelector("input").checked) continue;
+      work.models.push({
+        id: model.id,
+        contextWindow: model.contextWindow ?? ctxDefault,
+        ...(model.pricing ? { pricing: model.pricing } : {}),
+      });
+    }
+    renderModels();
+    msgEl.textContent = "已加入列表，记得点保存生效";
+    close();
   };
 }
 
