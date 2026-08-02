@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { COMPACTION_STRATEGY_IDS } from "./agent/compaction/registry.js";
 
 /** thinking 档位：就这四档，不多不少（DeepSeek Anthropic 端点 reasoning.effort） */
 export const EFFORT_LEVELS = ["none", "low", "high", "max"] as const;
@@ -11,6 +12,8 @@ export interface Config {
   contextWindow: number;
   /** 未设置 = 不传 reasoning 参数（端点默认 high） */
   effort?: EffortLevel;
+  /** 压缩策略 id（见 agent/compaction/registry），未设置 = 默认策略 */
+  compactionStrategy?: string;
 }
 
 const DEFAULT_BASE_URL = "https://api.deepseek.com/anthropic";
@@ -64,7 +67,18 @@ export function loadConfig(): Config {
     effort = rawEffort as EffortLevel;
   }
 
+  let compactionStrategy: string | undefined;
+  const rawCompact = process.env.XHARNESS_COMPACT_STRATEGY;
+  if (rawCompact) {
+    if (!COMPACTION_STRATEGY_IDS.includes(rawCompact)) {
+      throw new Error(
+        `XHARNESS_COMPACT_STRATEGY 无效："${rawCompact}"，可选策略：${COMPACTION_STRATEGY_IDS.join(" | ")}`
+      );
+    }
+    compactionStrategy = rawCompact;
+  }
+
   checkRipgrep();
 
-  return { apiKey, baseUrl, model, contextWindow, effort };
+  return { apiKey, baseUrl, model, contextWindow, effort, compactionStrategy };
 }

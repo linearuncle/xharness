@@ -743,6 +743,8 @@ async function boot() {
   S.meta = { ...defaultChoice() };
   // 外观：启动即应用，之后跟随系统深浅变化
   S.appearance = st.appearance;
+  S.general = st.general;
+  S.compactionStrategies = st.compactionStrategies ?? [];
   Appearance.init(S.appearance, (a) => (S.appearance = a));
   Theme.apply(S.appearance);
   Theme.watchSystem(() => S.appearance);
@@ -849,11 +851,37 @@ function switchSettingsPage(page) {
   $("set-nav-models").classList.toggle("active", page === "models");
   $("set-nav-appearance").classList.toggle("active", page === "appearance");
   $("set-nav-plugins").classList.toggle("active", page === "plugins");
+  $("set-nav-general").classList.toggle("active", page === "general");
   $("set-page-models").classList.toggle("hidden", page !== "models");
   $("set-page-appearance").classList.toggle("hidden", page !== "appearance");
   $("set-page-plugins").classList.toggle("hidden", page !== "plugins");
+  $("set-page-general").classList.toggle("hidden", page !== "general");
   if (page === "appearance") Appearance.render();
   if (page === "plugins") refreshPlugins();
+  if (page === "general") renderGeneralPage();
+}
+
+/* 通用设置页：压缩策略单选卡片（点击即保存，全局生效） */
+function renderGeneralPage() {
+  const box = $("general-compaction-rows");
+  if (!box) return;
+  box.innerHTML = "";
+  const current = S.general?.compactionStrategy ?? "classic";
+  for (const s of S.compactionStrategies) {
+    const row = document.createElement("div");
+    row.className = "ap-row gen-strategy-row";
+    row.innerHTML = `
+      <input type="radio" name="compaction-strategy" ${s.id === current ? "checked" : ""} />
+      <div class="gen-strategy-text">
+        <div class="ap-row-label">${esc(s.label)}</div>
+        <div class="gen-strategy-desc">${esc(s.description)}</div>
+      </div>`;
+    row.onclick = async () => {
+      S.general = await api.setGeneral({ compactionStrategy: s.id });
+      renderGeneralPage();
+    };
+    box.appendChild(row);
+  }
 }
 
 function bindSettings() {
@@ -874,6 +902,7 @@ function bindSettings() {
   $("md-close").onclick = closeModelDialog;
   $("md-cancel").onclick = closeModelDialog;
   $("set-nav-plugins").onclick = () => switchSettingsPage("plugins");
+  $("set-nav-general").onclick = () => switchSettingsPage("general");
   $("btn-add-plugin-github").onclick = openPluginDialog;
   $("btn-add-plugin-local").onclick = installPluginLocal;
   $("pg-close").onclick = closePluginDialog;

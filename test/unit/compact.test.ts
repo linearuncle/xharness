@@ -4,7 +4,7 @@ import {
   maybeCompact,
   KEEP_RECENT_MESSAGES,
   SUMMARY_PREFIX,
-} from "../../src/agent/compact.js";
+} from "../../src/agent/compaction/index.js";
 import { History } from "../../src/session/history.js";
 import type {
   ApiClient,

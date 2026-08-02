@@ -27,6 +27,9 @@ let projects = []; // [{dir}]
 let conversations = {}; // id -> {projectDir,title,pinned,createdAt,blocks}
 let providers = []; // 模型供应商（settings.jsonl 重放）
 let appearance = null; // 外观设置（settings.jsonl 重放；null = 默认）
+let general = null; // 通用设置（settings.jsonl 重放；null = 默认）
+
+const DEFAULT_GENERAL = { compactionStrategy: "classic" };
 
 // 外观默认值：浅/深两套主题独立配置，mode 决定生效哪套（system 跟随系统）
 export const DEFAULT_APPEARANCE = {
@@ -128,8 +131,10 @@ export function load() {
   }
 
   // settings.jsonl 重放：{op:"upsert",provider} / {op:"delete",id} / {op:"appearance",appearance}
+  //                     / {op:"general",general}
   providers = [];
   appearance = null;
+  general = null;
   for (const r of readLines(SETTINGS_FILE)) {
     if (r.op === "upsert" && r.provider?.id) {
       const i = providers.findIndex((p) => p.id === r.provider.id);
@@ -139,6 +144,8 @@ export function load() {
       providers = providers.filter((p) => p.id !== r.id);
     } else if (r.op === "appearance" && r.appearance) {
       appearance = r.appearance;
+    } else if (r.op === "general" && r.general) {
+      general = r.general;
     }
   }
   if (!providers.some((p) => p.id === "deepseek")) {
@@ -158,6 +165,7 @@ function rewriteSettings() {
     out += line({ op: "upsert", provider: p, ts: Date.now() });
   }
   if (appearance) out += line({ op: "appearance", appearance, ts: Date.now() });
+  if (general) out += line({ op: "general", general, ts: Date.now() });
   writeFileSync(SETTINGS_FILE, out);
   try { chmodSync(SETTINGS_FILE, 0o600); } catch { /* noop */ }
 }
@@ -179,6 +187,15 @@ export function setAppearance(a) {
     dark: { ...DEFAULT_APPEARANCE.dark, ...(a?.dark ?? {}) },
   };
   appendLine(SETTINGS_FILE, { op: "appearance", appearance, ts: Date.now() });
+}
+
+export function getGeneral() {
+  return { ...DEFAULT_GENERAL, ...(general ?? {}) };
+}
+
+export function setGeneral(patch) {
+  general = { ...getGeneral(), ...(patch ?? {}) };
+  appendLine(SETTINGS_FILE, { op: "general", general, ts: Date.now() });
 }
 
 // 取 key（仅主进程内部使用，不经 IPC）

@@ -710,3 +710,11 @@ body::after {
   pointer-events: none; border: 1px solid var(--window-border, transparent);
   border-radius: 18px;
 }
+
+/* 通用设置：压缩策略单选行 */
+.gen-strategy-row { cursor: pointer; align-items: flex-start; }
+.gen-strategy-row:first-child { border-top: none; }
+.gen-strategy-row:hover { background: var(--hover); }
+.gen-strategy-row input[type="radio"] { margin-top: 3px; accent-color: var(--accent); }
+.gen-strategy-text { display: flex; flex-direction: column; gap: 3px; }
+.gen-strategy-desc { color: var(--text-3); font-size: 12.5px; line-height: 1.5; }

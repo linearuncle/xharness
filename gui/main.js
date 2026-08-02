@@ -189,7 +189,22 @@ ipcMain.handle("state:get", () => ({
   efforts: engine.EFFORTS,
   yoloAcked: existsSync(ACK_FILE),
   appearance: store.getAppearance(),
+  general: store.getGeneral(),
+  compactionStrategies: engine.listCompactionStrategies(),
 }));
+
+// ---------- 通用设置 ----------
+
+ipcMain.handle("general:get", () => store.getGeneral());
+
+ipcMain.handle("general:set", (_e, patch) => {
+  const clean = {};
+  if (typeof patch?.compactionStrategy === "string") {
+    clean.compactionStrategy = patch.compactionStrategy;
+  }
+  store.setGeneral(clean);
+  return store.getGeneral();
+});
 
 // ---------- 外观 ----------
 

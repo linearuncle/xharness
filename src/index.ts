@@ -12,7 +12,7 @@ import {
   loadProjectInstructions,
 } from "./agent/prompts.js";
 import { runTurn } from "./agent/loop.js";
-import { forceCompact, maybeCompact } from "./agent/compact.js";
+import { forceCompact, maybeCompact } from "./agent/compaction/index.js";
 import { History } from "./session/history.js";
 import { createRenderer, renderTodos, type Renderer } from "./ui/render.js";
 import { createReplController } from "./ui/replController.js";

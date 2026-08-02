@@ -19,6 +19,8 @@ contextBridge.exposeInMainWorld("api", {
   getPluginManifest: (root) => ipcRenderer.invoke("plugins:manifest-get", root),
   savePluginManifest: (root, text) =>
     ipcRenderer.invoke("plugins:manifest-save", { root, text }),
+  getGeneral: () => ipcRenderer.invoke("general:get"),
+  setGeneral: (patch) => ipcRenderer.invoke("general:set", patch),
   getAppearance: () => ipcRenderer.invoke("appearance:get"),
   setAppearance: (a) => ipcRenderer.invoke("appearance:set", a),
   setVibrancy: (enabled) => ipcRenderer.invoke("appearance:vibrancy", enabled),

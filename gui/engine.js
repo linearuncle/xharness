@@ -12,7 +12,8 @@ import {
   loadProjectInstructions,
 } from "../dist/agent/prompts.js";
 import { runTurn } from "../dist/agent/loop.js";
-import { maybeCompact, forceCompact } from "../dist/agent/compact.js";
+import { maybeCompact, forceCompact } from "../dist/agent/compaction/index.js";
+export { listCompactionStrategies } from "../dist/agent/compaction/registry.js";
 import { History } from "../dist/session/history.js";
 import { loadSkills } from "../dist/skills/loader.js";
 import { createSkillTool } from "../dist/tools/skill.js";
@@ -191,6 +192,8 @@ function config(s) {
     contextWindow: model.contextWindow || 200_000,
     // 空/未设 → 产品默认 high；"none" 为合法档位须原样透传
     effort: s.effort || DEFAULT_EFFORT,
+    // 全局设置：未知/未设 id 由 registry 回退默认策略
+    compactionStrategy: store.getGeneral().compactionStrategy,
   };
 }
 

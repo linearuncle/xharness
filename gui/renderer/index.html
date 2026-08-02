@@ -131,6 +131,7 @@
       <div class="sb-item active" id="set-nav-models" data-page="models"><span class="ic">▤</span>模型设置</div>
       <div class="sb-item" id="set-nav-appearance" data-page="appearance"><span class="ic">☀</span>外观</div>
       <div class="sb-item" id="set-nav-plugins" data-page="plugins"><span class="ic">🧩</span>插件</div>
+      <div class="sb-item" id="set-nav-general" data-page="general"><span class="ic">⚙</span>通用</div>
     </aside>
     <main id="set-main">
       <div id="set-page-models" class="set-page">
@@ -148,6 +149,12 @@
         </div>
       </div>
       <div id="set-page-appearance" class="set-page hidden"><!-- appearance.js 动态渲染 --></div>
+      <div id="set-page-general" class="set-page hidden">
+        <h1>通用</h1>
+        <p class="set-desc">上下文压缩等通用行为设置，全局生效。</p>
+        <div class="ap-section-label">上下文压缩策略</div>
+        <div class="ap-editor"><div class="ap-editor-body" id="general-compaction-rows"><!-- app.js 动态渲染 --></div></div>
+      </div>
       <div id="set-page-plugins" class="set-page hidden">
         <h1>插件</h1>
         <p class="set-desc">插件在工具执行前介入（preToolUse hook），安装于 ~/.agents/plugins；项目内 .agents/plugins 会覆盖同名插件，仅运行时生效。</p>

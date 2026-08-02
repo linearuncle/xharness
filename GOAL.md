@@ -108,15 +108,34 @@ xharness/
   - git 状态摘要获取失败（非 git 仓库等）时静默为空，不抛错。
   - 验收：单测断言各段落均出现在组装结果中，空注入时不含对应段落。
 
-- **F4 上下文压缩 compact** (`src/agent/compact.ts`)
-  - 自动：估算历史 token（字符数/4 近似，估算器唯一实现在 `session/history.ts`），
-    超过模型上下文窗口（来源见 §2 上下文窗口决策）80% 时自动触发。
-  - 手动：`/compact` 命令随时触发；**自动与手动共用同一入口函数**，禁止两套路径。
-  - 压缩方式：调用 API 让模型把旧历史总结为 summary，以**一条带 `[历史摘要]` 前缀标记的
-    user 消息**注入；保留最近 **N=10** 条原始消息。
+- **F4 上下文压缩 compact** (`src/agent/compaction/`)
+  - **可插拔策略架构（2026-08-02 变更）**：压缩算法抽象为 `CompactionStrategy` 接口
+    （`id/label/description/shouldCompact/compact`），在 `registry.ts` 注册；统一入口
+    `maybeCompact`/`forceCompact`（`compaction/index.ts`）按 `config.compactionStrategy`
+    分发，未知/未设 id 回退默认策略（容错不抛错）。**禁止在调用方按策略 id 写特殊分支**；
+    新增算法只需实现接口并注册。选择途径：CLI 环境变量 `XHARNESS_COMPACT_STRATEGY`
+    （在 `loadConfig()` 校验）；GUI 设置 → 通用 → 上下文压缩策略（settings.jsonl
+    `general` 事件持久化，全局生效）。
+  - 自动：触发条件归策略自有；手动 `/compact` 随时触发；**自动与手动共用策略的同一
+    compact 实现**，禁止两套路径。
+  - 压缩产物统一：模型总结的 summary 以**一条带 `[历史摘要]` 前缀标记的 user 消息**注入，
+    前缀跨策略共用（切换策略后也能识别既有摘要）。
   - **摘要必须保留：用户已做出的决策（含 AskUserQuestion 的回答）、当前任务状态、已改动的文件清单。**
   - 压缩调用失败（API 错误）：保留原历史、打印警告、本回合不再自动重试（用户可手动 `/compact`）。
   - TodoWrite 清单独立于消息历史，不参与压缩，压缩后仍在。
+  - tool_use/tool_result 配对不变量对所有策略生效：切点禁止落在配对中间。
+  - 内置策略：
+    - `classic`（默认）：估算历史 token（字符数/4 近似，估算器唯一实现在
+      `session/history.ts`）超过上下文窗口 80% 自动触发；保留最近 **N=10** 条原始消息，
+      其余单次摘要；切点落在配对中间时向旧侧扩窗。
+    - `pi`（2026-08-02 新增，移植自 pi-mono `packages/coding-agent/src/core/compaction/`，
+      文档 https://pi.dev/docs/latest/compaction）：剩余窗口不足 reserveTokens=16384 时
+      自动触发；按 token 预算保留最近 keepRecentTokens=20000 的消息（切点只落在不含
+      tool_result 的消息上，可切在 assistant 消息处）；结构化摘要（目标/约束/进度/
+      关键决策/后续步骤/关键上下文）；再次压缩时把上次摘要作为底稿**增量更新**而非重新
+      总结；从 Read/Write/Edit 工具调用累积读/改文件清单（`<read-files>`/
+      `<modified-files>` 标签，跨多次压缩累积）；切点落在回合中间时对回合前缀单独摘要后
+      合并（split turn）。未移植：分支摘要（无会话分支）、settings 外部配置（常量即默认）。
   - 验收：构造超长历史，自动压缩后会话能继续且模型不重复提问已答问题。
 
 ### 4.2 内置工具（核心 8 个 + Skill 元工具 1 个，`src/tools/`）

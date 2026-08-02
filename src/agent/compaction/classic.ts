@@ -1,9 +1,11 @@
-import type { ApiClient } from "../api/client.js";
-import type { Config } from "../config.js";
-import type { History } from "../session/history.js";
-import type { ContentBlock, Message, TextBlock } from "../types/messages.js";
+import type { ContentBlock, Message, TextBlock } from "../../types/messages.js";
+import {
+  SUMMARY_PREFIX,
+  type CompactDeps,
+  type CompactResult,
+  type CompactionStrategy,
+} from "./types.js";
 
-export const SUMMARY_PREFIX = "[历史摘要]";
 export const KEEP_RECENT_MESSAGES = 10;
 
 const COMPACT_THRESHOLD_RATIO = 0.8;
@@ -11,20 +13,6 @@ const SUMMARY_MAX_TOKENS = 4096;
 const TOOL_RESULT_EXCERPT_CHARS = 2000;
 const TOOL_INPUT_EXCERPT_CHARS = 500;
 const TOO_SHORT_WARNING = "会话历史太短，无需压缩。";
-
-export interface CompactDeps {
-  history: History;
-  client: ApiClient;
-  config: Config;
-  system?: string;
-}
-
-export interface CompactResult {
-  compacted: boolean;
-  warning?: string;
-  beforeTokens: number;
-  afterTokens: number;
-}
 
 function truncate(text: string, max: number): string {
   if (text.length <= max) return text;
@@ -151,16 +139,17 @@ async function doCompact(deps: CompactDeps): Promise<CompactResult> {
   };
 }
 
-/** 自动压缩入口：超过上下文窗口 80% 才执行，否则无操作。 */
-export async function maybeCompact(deps: CompactDeps): Promise<CompactResult> {
-  const beforeTokens = deps.history.estimateTokens();
-  if (beforeTokens <= deps.config.contextWindow * COMPACT_THRESHOLD_RATIO) {
-    return { compacted: false, beforeTokens, afterTokens: beforeTokens };
-  }
-  return doCompact(deps);
-}
-
-/** 手动压缩入口（/compact）：无条件执行，与自动共用 doCompact。 */
-export async function forceCompact(deps: CompactDeps): Promise<CompactResult> {
-  return doCompact(deps);
-}
+/** 经典策略：按消息条数保留（最近 10 条），单次摘要，>80% 窗口自动触发 */
+export const classicStrategy: CompactionStrategy = {
+  id: "classic",
+  label: "经典（按条数保留）",
+  description:
+    "保留最近 10 条消息，其余压缩为一份简明摘要；历史超过上下文窗口 80% 时自动触发。",
+  shouldCompact(deps) {
+    return (
+      deps.history.estimateTokens() >
+      deps.config.contextWindow * COMPACT_THRESHOLD_RATIO
+    );
+  },
+  compact: doCompact,
+};
