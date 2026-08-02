@@ -92,57 +92,66 @@ export async function runTurn(opts: RunTurnOptions): Promise<void> {
       return;
     }
 
-    const results: ToolResultBlock[] = [];
+    // 同一响应内的多个 tool_use 并行执行；tool_result 按 tool_use 原顺序落位。
+    // 单个失败以 is_error 回填不影响其余；上限占位与中断占位保证 history 配对合法。
+    const results: ToolResultBlock[] = new Array(toolUses.length);
     let hitLimit = false;
     let interrupted = false;
 
-    for (let i = 0; i < toolUses.length; i++) {
-      const toolUse = toolUses[i];
-      if (signal?.aborted) {
-        interrupted = true;
-        // 为所有未执行的 tool_use 回填占位 tool_result，保证 history 配对合法
-        for (let j = i; j < toolUses.length; j++) {
-          results.push({
-            type: "tool_result",
-            tool_use_id: toolUses[j].id,
-            content: "[未执行——回合被中断]",
-            is_error: true,
-          });
-        }
-        break;
-      }
-      if (executed >= maxToolCalls) {
-        hitLimit = true;
-        results.push({
+    if (signal?.aborted) {
+      interrupted = true;
+      for (let i = 0; i < toolUses.length; i++) {
+        results[i] = {
           type: "tool_result",
-          tool_use_id: toolUse.id,
-          content: "[已达单回合工具调用上限，未执行]",
+          tool_use_id: toolUses[i].id,
+          content: "[未执行——回合被中断]",
           is_error: true,
-        });
-        continue;
+        };
       }
-      executed++;
-      onEvent({
-        type: "tool_start",
-        id: toolUse.id,
-        name: toolUse.name,
-        input: toolUse.input,
-      });
-      const result = await executeTool(registry, toolUse, signal);
-      onEvent({
-        type: "tool_end",
-        id: toolUse.id,
-        name: toolUse.name,
-        result: result.content,
-        isError: result.isError === true,
-      });
-      const block: ToolResultBlock = {
-        type: "tool_result",
-        tool_use_id: toolUse.id,
-        content: result.content,
-      };
-      if (result.isError) block.is_error = true;
-      results.push(block);
+    } else {
+      const runnable: number[] = [];
+      for (let i = 0; i < toolUses.length; i++) {
+        if (executed >= maxToolCalls) {
+          hitLimit = true;
+          results[i] = {
+            type: "tool_result",
+            tool_use_id: toolUses[i].id,
+            content: "[已达单回合工具调用上限，未执行]",
+            is_error: true,
+          };
+        } else {
+          executed++;
+          runnable.push(i);
+        }
+      }
+      await Promise.all(
+        runnable.map(async (i) => {
+          const toolUse = toolUses[i];
+          onEvent({
+            type: "tool_start",
+            id: toolUse.id,
+            name: toolUse.name,
+            input: toolUse.input,
+          });
+          const result = await executeTool(registry, toolUse, signal);
+          onEvent({
+            type: "tool_end",
+            id: toolUse.id,
+            name: toolUse.name,
+            result: result.content,
+            isError: result.isError === true,
+          });
+          const block: ToolResultBlock = {
+            type: "tool_result",
+            tool_use_id: toolUse.id,
+            content: result.content,
+          };
+          if (result.isError) block.is_error = true;
+          results[i] = block;
+        })
+      );
+      // 执行途中被中断：工具已各自响应 signal 收尾并返回结果，配对仍完整
+      if (signal?.aborted) interrupted = true;
     }
 
     if (interrupted) {

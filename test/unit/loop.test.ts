@@ -104,7 +104,7 @@ describe("runTurn", () => {
     expect(events.some((e) => e.type === "tool_start")).toBe(false);
   });
 
-  it("同一响应含 2 个 tool_use 时严格按序串行执行并回填", async () => {
+  it("同一响应含 2 个 tool_use 时并行执行，结果按 tool_use 顺序回填", async () => {
     const order: string[] = [];
     const registry = new ToolRegistry();
     registry.register(makeTool("alpha", async () => {
@@ -134,13 +134,13 @@ describe("runTurn", () => {
     });
 
     expect(order).toEqual(["alpha", "beta"]);
+    // 并行：两个 tool_start 先后同步发出，tool_end 在其后（完成顺序不做保证）
     const toolEvents = events.filter((e) => e.type === "tool_start" || e.type === "tool_end");
-    expect(toolEvents.map((e) => `${e.type}:${"name" in e ? e.name : ""}`)).toEqual([
+    expect(toolEvents.slice(0, 2).map((e) => `${e.type}:${"name" in e ? e.name : ""}`)).toEqual([
       "tool_start:alpha",
-      "tool_end:alpha",
       "tool_start:beta",
-      "tool_end:beta",
     ]);
+    expect(toolEvents.filter((e) => e.type === "tool_end")).toHaveLength(2);
 
     const messages = history.getMessages();
     // user, assistant(tool_use), user(tool_result), assistant(text)
@@ -152,6 +152,46 @@ describe("runTurn", () => {
       ["t2", "beta-out"],
     ]);
     expect(events.at(-1)).toEqual({ type: "turn_end", reason: "end_turn" });
+  });
+
+  it("并行执行：慢工具不阻塞快工具完成，结果顺序仍与 tool_use 一致", async () => {
+    const done: string[] = [];
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const registry = new ToolRegistry();
+    registry.register(makeTool("slow", async () => {
+      await sleep(40);
+      done.push("slow");
+      return { content: "slow-out" };
+    }));
+    registry.register(makeTool("fast", async () => {
+      await sleep(5);
+      done.push("fast");
+      return { content: "fast-out" };
+    }));
+
+    const history = new History();
+    const client = fakeClient([
+      { content: [toolUse("t1", "slow"), toolUse("t2", "fast")], stopReason: "tool_use" },
+      textResponse("finished"),
+    ]);
+
+    await runTurn({
+      userInput: "run tools",
+      history,
+      registry,
+      client,
+      config,
+      system: "sys",
+      onEvent: () => {},
+    });
+
+    // 快工具先完成 → 证明并发；结果块仍按 tool_use 原顺序
+    expect(done).toEqual(["fast", "slow"]);
+    const resultBlocks = history.getMessages()[2].content as ToolResultBlock[];
+    expect(resultBlocks.map((b) => [b.tool_use_id, b.content])).toEqual([
+      ["t1", "slow-out"],
+      ["t2", "fast-out"],
+    ]);
   });
 
   it("第 1 个工具失败以 is_error 回填，第 2 个仍执行", async () => {
@@ -231,7 +271,7 @@ describe("runTurn", () => {
     expect(lastResults[1].content).toContain("上限");
   });
 
-  it("abort 中断（执行到一半）：保留已完成 tool_result，未执行 tool_use 回填占位，末尾追加中断标记", async () => {
+  it("abort 中断（批内执行中）：并行批内工具各自收尾，结果配对完整，末尾追加中断标记", async () => {
     const controller = new AbortController();
     const registry = new ToolRegistry();
     let betaRan = false;
@@ -261,7 +301,8 @@ describe("runTurn", () => {
       onEvent: (e) => events.push(e),
     });
 
-    expect(betaRan).toBe(false);
+    // 并行语义：批内工具已同时启动，中断不撤销同批工具，各自收尾（真实工具经 signal 自行终止）
+    expect(betaRan).toBe(true);
     expect(events.at(-1)).toEqual({ type: "turn_end", reason: "interrupted" });
 
     const messages = history.getMessages();
@@ -271,12 +312,7 @@ describe("runTurn", () => {
     const resultMessage = messages.at(-2)!;
     expect(resultMessage.content).toEqual([
       { type: "tool_result", tool_use_id: "t1", content: "first-done" },
-      {
-        type: "tool_result",
-        tool_use_id: "t2",
-        content: "[未执行——回合被中断]",
-        is_error: true,
-      },
+      { type: "tool_result", tool_use_id: "t2", content: "second-done" },
     ]);
     expectAllToolUsesPaired(messages);
   });

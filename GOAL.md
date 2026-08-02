@@ -80,8 +80,9 @@ xharness/
 - **F1 Agent 主循环** (`src/agent/loop.ts`)
   - 用户输入 → 调 Messages API（带 tools）→ 若响应含 `tool_use` 块则执行工具、
     以 `tool_result` 块回填 → 继续调 API → 循环，直到响应无 `tool_use`（回合结束）。
-  - **多 tool_use 严格串行**：同一响应含多个 `tool_use` 时按 API 返回顺序逐个执行；
-    单个失败以 `is_error: true` 回填后**继续执行其余**；禁止任何形式的工具并行执行。
+  - **多 tool_use 并行执行**（2026-08-02 决策变更，原为严格串行）：同一响应内的多个
+    `tool_use` 并发执行，`tool_result` 按 tool_use 原顺序回填；单个失败以
+    `is_error: true` 回填不影响其余；中断时批内已启动的工具各自响应 signal 收尾，配对保持完整。
   - **上限 200 的精确定义**：单回合内已执行的 tool_use 总次数（不是 API round-trip 数）。
     超限：停止执行、history 完整保留、向用户提示后回到提示符，不算崩溃。
   - 工具执行抛异常时，异常信息作为 `is_error: true` 的 tool_result 回填，循环不崩溃。
@@ -262,7 +263,6 @@ npm run test:e2e
 - 持久记忆、Artifact、定时任务
 - OpenAI 等其他 provider 格式
 - markdown 终端渲染、主题、TUI 框架
-- 工具并行执行（严格串行，见 F1）
 - 运行时沙箱、路径约束、命令黑名单（YOLO 有意为之，见 §2；测试红线见 §6.3 是测试层的事）
 
 ## 8. 完成标准（Judge 审定整个 goal）

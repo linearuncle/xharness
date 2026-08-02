@@ -4,7 +4,7 @@
   <img src="docs/screenshot.png" alt="xharness GUI" width="880" />
 </p>
 
-用 TypeScript 实现的 coding agent harness，提供终端 CLI 与 macOS 桌面 GUI 两种形态：模型自主地**读代码 → 改代码 → 跑命令验证**，直到任务完成。走 Anthropic Messages API 格式（`@anthropic-ai/sdk`，流式输出），默认对接 DeepSeek 的 Anthropic 兼容端点，端点与模型完全可配（已内置 DeepSeek / 可添加 Kimi 等任意兼容供应商）。
+用 TypeScript 实现的 coding agent harness，提供终端 CLI 与 macOS 桌面 GUI 两种形态：模型自主地**读代码 → 改代码 → 跑命令验证**，直到任务完成。走 Anthropic Messages API 格式（`@anthropic-ai/sdk`，流式输出），默认对接 DeepSeek 的 Anthropic 兼容端点，端点与模型完全可配（已内置 DeepSeek / 可添加 Kimi 等任意兼容供应商）。同一响应中的多个工具调用**并行执行**，结果按序回填。
 
 ## 安装
 
@@ -160,7 +160,6 @@ npm start          # 需 ANTHROPIC_API_KEY 或 DEEPSEEK_API_KEY
 ## 已知限制
 
 - **B1 压缩下限**：上下文压缩保留最近 10 条原始消息。当消息总数 ≤ 10 且其中单条工具输出巨大时，compact 无法压缩，理论上可导致上下文溢出。真实 1M 窗口 + Bash 输出 30K 字符截断的前提下，仅 Read 病态大文件等极端情况可能触达，概率极低。
-- **工具串行执行**：同一响应中的多个工具调用严格按顺序逐个执行，不并行（有意为之）。
 - **当前版本暂不提供**：子代理/多代理编排、MCP 协议、Hooks/settings.json 配置体系、YOLO 之外的权限确认模式、Plan 模式、持久记忆、OpenAI 等其他 provider 格式、markdown 终端渲染/TUI 框架、运行时沙箱。
 
 ## 开发
