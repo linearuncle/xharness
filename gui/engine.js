@@ -279,6 +279,8 @@ function configMeta(s) {
     provider,
     apiKey: "",
     baseUrl: provider.baseUrl,
+    // 线格式按供应商设置分发（anthropic / openai-responses）；老数据无字段回退 anthropic
+    apiFormat: provider.apiFormat ?? "anthropic",
     model: model.id,
     contextWindow: model.contextWindow || 200_000,
     // 空/未设 → 产品默认 high；"none" 为合法档位须原样透传

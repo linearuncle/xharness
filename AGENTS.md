@@ -36,8 +36,11 @@ xharness.app，匹配 "Electron" 会失手）。GUI 调试/测试走 CDP
 
 ### 分层铁律（违反即错，评审按此核对）
 
-- `src/api/client.ts` 是**唯一**接触 `@anthropic-ai/sdk` 与原始流事件的模块，对外只发
-  归一化领域事件（`text_delta | thinking_delta | tool_start | tool_end | error | turn_end`）。
+- `src/api/` 是**唯一**接触供应商 SDK 与原始流事件的层，对外只发归一化领域事件
+  （`text_delta | thinking_delta | tool_start | tool_end | error | turn_end`）：
+  `client.ts` = 接口 + 共享重试/流聚合 + 按 `config.apiFormat` 分发；
+  `anthropic.ts` = Messages 格式（唯一碰 `@anthropic-ai/sdk`）；
+  `responses.ts` = OpenAI Response 格式（零依赖 fetch+SSE，翻译成 RawStreamEvent 复用聚合）。
 - `src/agent/loop.ts` 只做回合编排：不碰 SDK、不读 `process.env`、不解析原始流、不内联压缩。
 - `src/ui/render.ts` 只消费领域事件。
 - `src/config.ts` 的 `loadConfig()` 是全项目**唯一** `process.env` 读取点。
@@ -59,11 +62,16 @@ SIGTERM）。上限 200 = 单回合已执行 tool_use 总数（非 round-trip �
 
 ### 端点与模型
 
-Anthropic 只是 **API 格式**；默认端点是 DeepSeek `https://api.deepseek.com/anthropic`，
-默认模型 `deepseek-v4-pro`。thinking 档位（none/low/high/max）：`none` 发
-`thinking:{type:"disabled"}`（实测唯一可靠关闭方式），`low/high/max` 透传
-`reasoning:{effort}`（DeepSeek 扩展字段，client.ts 中唯一的 `as` 断言处）。
-思考内容只渲染、**不入 history**。`budget_tokens` 不实现（DeepSeek 忽略）。
+线格式按供应商 `apiFormat` 二选一（`anthropic` / `openai-responses`），内部领域模型
+保持 Anthropic 形状不变。默认端点是 DeepSeek `https://api.deepseek.com/anthropic`，
+默认模型 `deepseek-v4-pro`。thinking 档位（none/low/high/max）在 Anthropic 格式下：
+`none` 发 `thinking:{type:"disabled"}`（实测唯一可靠关闭方式），`low/high/max` 透传
+`reasoning:{effort}`（DeepSeek 扩展字段，anthropic.ts 中唯一的 `as` 断言处）；
+Response 格式（grok/xAI，`https://api.x.ai/v1/responses`）只有 low/high 两档：
+none/未设省略 reasoning，max 归并 high，模型不支持 reasoning 参数（400）时自动去
+reasoning 重试一次。思考内容只渲染、**不入 history**。`budget_tokens` 不实现
+（DeepSeek 忽略）。Response API 的 usage 须把 cached_tokens 从 input_tokens 里拆出
+（对齐「input 不含缓存」计费语义）。CLI 环境变量路径恒 anthropic。
 
 ### compact（src/agent/compact.ts）
 

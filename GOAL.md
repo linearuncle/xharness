@@ -14,7 +14,7 @@
 | 决策项 | 结论 |
 |---|---|
 | 语言 / 运行时 | TypeScript，Node.js >= 22（Judge 裁决升级：Glob 工具依赖 Node 22 的 fs.glob），ESM |
-| LLM 接口 | 仅 Anthropic Messages API **格式**（用 `@anthropic-ai/sdk`），流式（streaming）输出；端点与模型完全可配，不绑定 Anthropic 官方 |
+| LLM 接口 | 按供应商 `apiFormat` 二选一：**Anthropic Messages API 格式**（`@anthropic-ai/sdk`）或 **OpenAI Response API 格式**（零依赖 fetch+SSE）；均流式输出；端点与模型完全可配，不绑定 Anthropic 官方 |
 | 默认端点 | **DeepSeek Anthropic 兼容端点 `https://api.deepseek.com/anthropic`**，可用 `ANTHROPIC_BASE_URL` 环境变量覆盖为官方 Anthropic 或其他兼容端点 |
 | 默认模型 | `deepseek-v4-pro`（agentic coding 旗舰），可用 `XHARNESS_MODEL` 环境变量覆盖（如 `deepseek-v4-flash`、claude 系列）。注意旧名 `deepseek-chat`/`deepseek-reasoner` 已于 2026-07 停用，不得使用 |
 | API Key | 读 `ANTHROPIC_API_KEY` 环境变量（填 DeepSeek key 即可），缺失时启动报错并提示 |
@@ -316,8 +316,9 @@ description 文本是工具质量的核心，须参照 Claude Code 的措辞风�
   流程：申请设备码 → GUI 展示 user_code + 自动开浏览器（验证地址强制 https）→
   RFC 8628 轮询（authorization_pending 续等 / slow_down 加 5s / denied、expired
   终止）→ 凭据 `{access, refresh, expires}` 落盘。
-- **API 调用**：api.x.ai 原生支持 Anthropic Messages 格式（实测 `/v1/messages`），
-  Base URL `https://api.x.ai`，与既有 client 完全兼容；OAuth access token 走
+- **API 调用**：grok 模型只支持 OpenAI Response API（`/v1/responses`，见 §4.10；
+  此前实测可用的 `/v1/messages` Anthropic 兼容路径已被 xAI 弃用），Base URL
+  `https://api.x.ai`；OAuth access token 走
   `Authorization: Bearer`（`Config.authToken`，client.ts 里 authToken 设置时
   apiKey 传 null）。请求前 token 剩余有效期不足（提前 5 分钟）即用 refresh token
   刷新并落盘（refresh 未轮换时沿用旧值）；刷新失败提示重新登录。
@@ -407,6 +408,35 @@ description 文本是工具质量的核心，须参照 Claude Code 的措辞风�
 - 降级：dot 语法错误保留原代码块并在下方附错误行；wasm 编译失败静默保留代码块。
 - 依赖说明：@hpcc-js/wasm-graphviz 计入 gui dependencies（staging 自动继承），
   渲染层实际加载 vendor 文件，与 dompurify/morphdom 双轨一致。
+
+### 4.13 OpenAI Response API 支持（2026-08-02 立项）
+
+- **动机**：grok 模型只支持 OpenAI Response API（`POST /v1/responses`），内置 grok
+  供应商（OAuth 订阅）需整体切到该格式；架构上 Anthropic Messages 与 OpenAI
+  Responses 两种线格式在 loop 里可自由替换。
+- **架构**：内部领域模型（`Message[]`/`ContentBlock`/`AgentEvent`）保持 Anthropic
+  形状不变，与线协议解耦。`Config.apiFormat`（`"anthropic" | "openai-responses"`，
+  缺省 anthropic）在 `createApiClient` 分发到 `src/api/anthropic.ts`（SDK，唯一碰
+  `@anthropic-ai/sdk`）或 `src/api/responses.ts`（零依赖 fetch+SSE，不引入 openai
+  包）；后者把 Response API SSE **翻译成既有 `RawStreamEvent`**，100% 复用
+  `createApiClientFromStreamFn` 的重试与 `consumeStream` 聚合——loop/compact/
+  render/GUI 事件层零改动。`StreamRequestParams` 同步中性化为 `effort` 透传，
+  线格式映射（T7 thinking/reasoning vs Responses reasoning.effort）下沉到各实现。
+- **Responses 映射要点**：tool_use/tool_result 配对 ↔ function_call/function_call_output
+  （call_id 沿用 tool_use.id，配对不变量不变）；system → instructions；max_tokens →
+  max_output_tokens；`store:false` 无状态重放全量历史；图片附件块 → input_image
+  data URL。usage 拆分对齐 Anthropic 语义（input 不含缓存）：Response API 的
+  input_tokens 含 cached_tokens，须减去否则缓存部分按全价重复计费。
+- **effort 映射（xAI）**：Responses 仅 low/high 两档——none/未设省略 reasoning，
+  low→low，high/max→high；不带 `reasoning.summary`。部分模型（如 grok-4-1-fast）
+  不支持 reasoning 参数会 400，客户端自动去 reasoning 重试一次（未产出流事件前）。
+- **GUI**：内置 grok 供应商种子 `apiFormat` 改 `openai-responses`；设置 → 供应商
+  详情页「API 格式」下拉启用（两格式可选，所有供应商可编辑）——**存量
+  settings.jsonl 不迁移**（零迁移原则），老用户经该下拉手动切换。CLI 不接入
+  （环境变量路径恒 anthropic）。
+- 验收：单测覆盖消息转换全表/SSE 翻译/usage 拆分/reasoning 降级/分发器；
+  curl 实测 api.x.ai /v1/responses 流式事件与 reasoning 档位；GUI grok 全流程
+  冒烟（登录→流式→工具回合→统计→/compact）。
 
 ## 5. Tranche 划分（PM 按序推进，每个 tranche 结束交 Judge 审）
 
