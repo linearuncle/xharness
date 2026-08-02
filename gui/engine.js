@@ -27,6 +27,10 @@ export function initEngine() {
   }
 }
 
+/** 安装/新会话默认：flash + 高推理；用户改过的会话内选择优先（见 setModelChoice / setEffort） */
+export const DEFAULT_MODEL_ID = "deepseek-v4-flash";
+export const DEFAULT_EFFORT = "high";
+
 export const EFFORTS = [
   { value: "", label: "默认(高)" },
   { value: "none", label: "关闭" },
@@ -41,9 +45,13 @@ function enabledProviders() {
 
 export function defaultChoice() {
   const p = enabledProviders()[0];
-  return p
-    ? { providerId: p.id, model: p.models[0].id }
-    : { providerId: null, model: null };
+  if (!p) return { providerId: null, model: null, effort: DEFAULT_EFFORT };
+  const preferred = p.models.find((m) => m.id === DEFAULT_MODEL_ID);
+  return {
+    providerId: p.id,
+    model: preferred?.id ?? p.models[0].id,
+    effort: DEFAULT_EFFORT,
+  };
 }
 
 function resolveKey(provider) {
@@ -81,7 +89,7 @@ export function getSession(convId, projectDir, savedBlocks) {
     projectDir,
     providerId: choice.providerId,
     model: choice.model,
-    effort: undefined,
+    effort: choice.effort ?? DEFAULT_EFFORT,
     history: new History(),
     registry,
     skills,
@@ -173,7 +181,8 @@ function config(s) {
     baseUrl: provider.baseUrl,
     model: model.id,
     contextWindow: model.contextWindow || 200_000,
-    effort: s.effort || undefined,
+    // 空/未设 → 产品默认 high；"none" 为合法档位须原样透传
+    effort: s.effort || DEFAULT_EFFORT,
   };
 }
 
@@ -205,14 +214,26 @@ export function setModelChoice(convId, providerId, model) {
 
 export function setEffort(convId, effort) {
   const s = sessions.get(convId);
-  if (s) s.effort = effort || undefined;
+  if (!s) return;
+  // ""（默认(高)）与未设都落成产品默认 high；用户选 none/low/high/max 原样保留
+  s.effort = effort || DEFAULT_EFFORT;
 }
 
 export function sessionMeta(convId) {
   const s = sessions.get(convId);
-  if (s) return { providerId: s.providerId, model: s.model, effort: s.effort ?? "" };
+  if (s) {
+    return {
+      providerId: s.providerId,
+      model: s.model,
+      effort: s.effort || DEFAULT_EFFORT,
+    };
+  }
   const d = defaultChoice();
-  return { providerId: d.providerId, model: d.model, effort: "" };
+  return {
+    providerId: d.providerId,
+    model: d.model,
+    effort: d.effort || DEFAULT_EFFORT,
+  };
 }
 
 export function listSkills(projectDir) {

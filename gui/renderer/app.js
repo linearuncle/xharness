@@ -15,6 +15,8 @@ const S = {
   attachments: [], // [{path,name,isImage}]
 };
 
+const DEFAULT_MODEL_ID = "deepseek-v4-flash";
+const DEFAULT_EFFORT = "high";
 const EFFORT_LABEL = { "": "默认", none: "关闭", low: "低", high: "高", max: "Max" };
 const modelShort = (m) => (m ? m.replace(/^deepseek-/, "") : "未配置");
 
@@ -31,9 +33,16 @@ function providerStatus(p) {
   return { cls: " on", label: "已启用", dot: " on" };
 }
 
+/** 空态/新会话默认：优先 deepseek-v4-flash + high；用户改过后写在会话 meta 里 */
 function defaultChoice() {
   const p = S.providers.find((x) => x.enabled && x.models?.length);
-  return p ? { providerId: p.id, model: p.models[0].id } : { providerId: null, model: "" };
+  if (!p) return { providerId: null, model: "", effort: DEFAULT_EFFORT };
+  const preferred = p.models.find((m) => m.id === DEFAULT_MODEL_ID);
+  return {
+    providerId: p.id,
+    model: preferred?.id ?? p.models[0].id,
+    effort: DEFAULT_EFFORT,
+  };
 }
 
 /* ---------------- 侧栏 ---------------- */
@@ -660,7 +669,7 @@ async function boot() {
   S.providers = st.providers;
   S.efforts = st.efforts;
   S.sidebar = st.sidebar;
-  S.meta = { ...defaultChoice(), effort: "" };
+  S.meta = { ...defaultChoice() };
   $("username").textContent = "xharness";
   $("avatar").textContent = "x";
   updateModelLabel();
@@ -793,7 +802,7 @@ function closeSettings() {
   const stillValid = S.providers.some(
     (p) => p.id === S.meta.providerId && p.enabled && p.models?.some((m) => m.id === S.meta.model)
   );
-  if (!stillValid) S.meta = { ...defaultChoice(), effort: S.meta.effort };
+  if (!stillValid) S.meta = { ...defaultChoice(), effort: S.meta.effort || DEFAULT_EFFORT };
   updateModelLabel();
 }
 
@@ -881,8 +890,7 @@ function renderProviderDetail() {
   const urlInput = field("Base URL", `<input type="text" placeholder="https://api.example.com/anthropic" value="${esc(work.baseUrl)}" />`);
   urlInput.oninput = () => (work.baseUrl = urlInput.value.trim());
 
-  box.appendChild(el(`<label>API 格式</label>`));
-  box.appendChild(el(`<div class="pd-static">Anthropic Messages <span class="pd-static-dim">/v1/messages</span></div>`));
+  field("API 格式", `<select disabled><option>Anthropic Messages (/v1/messages)</option></select>`);
 
   // API Key：仅手动填写
   box.appendChild(el(`<label>API Key</label>`));

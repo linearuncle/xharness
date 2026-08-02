@@ -36,8 +36,8 @@ const DEFAULT_PROVIDER = {
   enabled: true,
   builtin: true,
   models: [
-    { id: "deepseek-v4-pro", contextWindow: 1_000_000 },
     { id: "deepseek-v4-flash", contextWindow: 1_000_000 },
+    { id: "deepseek-v4-pro", contextWindow: 1_000_000 },
   ],
 };
 
