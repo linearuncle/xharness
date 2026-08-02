@@ -71,10 +71,11 @@ const DEFAULT_GROK_PROVIDER = {
   oauth: null,
   enabled: true,
   builtin: true,
+  // 模型参数与定价以 models.dev/api.json 为准（2026-08 校对）
   models: [
-    { id: "grok-4.3", contextWindow: 2_000_000, pricing: { input: 1.25, output: 2.5, cacheRead: 0.2 } },
-    { id: "grok-4.5", contextWindow: 2_000_000 },
-    { id: "grok-4.1-fast", contextWindow: 1_000_000 },
+    { id: "grok-4.3", contextWindow: 1_000_000, pricing: { input: 1.25, output: 2.5, cacheRead: 0.2 } },
+    { id: "grok-4.5", contextWindow: 500_000, pricing: { input: 2, output: 6, cacheRead: 0.3 } },
+    { id: "grok-build-0.1", contextWindow: 256_000, pricing: { input: 1, output: 2, cacheRead: 0.2 } },
   ],
 };
 

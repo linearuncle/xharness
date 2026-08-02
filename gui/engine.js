@@ -55,6 +55,8 @@ const DEFAULT_MODEL_PRICING = {
   "deepseek-v4-flash": { input: 0.14, output: 0.28, cacheRead: 0.0028 },
   "deepseek-v4-pro": { input: 0.435, output: 0.87, cacheRead: 0.003625 },
   "grok-4.3": { input: 1.25, output: 2.5, cacheRead: 0.2 },
+  "grok-4.5": { input: 2, output: 6, cacheRead: 0.3 },
+  "grok-build-0.1": { input: 1, output: 2, cacheRead: 0.2 },
 };
 
 function emptyStats() {
