@@ -108,7 +108,6 @@ node scripts/cdp-eval.mjs '(async () => {
   const s = await api.getState();
   return {
     bridgeReady: typeof api.send === "function",
-    yoloAcked: s.yoloAcked,
     projects: s.sidebar.projects.map(p => p.dir.split("/").pop()),
     providers: s.providers.map(p => ({ id: p.id, hasKey: p.hasKey, keyLeaked: !!p.apiKey })),
   };
@@ -149,23 +148,12 @@ node scripts/cdp-eval.mjs --data-dir ../.xhtest '<表达式>'   # §3 冒烟原�
 
 - 端口发现靠启动日志里的 `DevTools listening on ws://127.0.0.1:<port>/...` 行；
   Electron **不会**落 `DevToolsActivePort` 文件，所以必须重定向输出。
-- 隔离数据目录是全新首启：`yolo-ack` 不存在，YOLO 风险确认弹窗会挡住 UI，
-  先点掉再做其他检查（顺带当交互测试）：
-  ```bash
-  node scripts/cdp-eval.mjs --data-dir ../.xhtest '(() => {
-    const m = document.querySelector("#yolo-modal");
-    if (m.classList.contains("hidden")) return "already-acked";
-    const agree = document.querySelector("#ym-agree");
-    if (!agree.checked) agree.click();   // 勿盲 click：已勾选时再点会取消勾选并禁用按钮
-    document.querySelector("#ym-start").click();
-    return "acked";
-  })()'
-  ```
+- 隔离数据目录是全新首启（无历史会话与设置），断言按首启空态编写。
 - **杀实例必须带 worktree 路径**，只杀自己的：
   `pkill -f "$PWD/gui/node_modules"`（二进制路径为
   `<worktree>/gui/node_modules/electron/dist/xharness.app/...`）。
-- 测试窗口会真实弹出在屏幕上，可能被用户/其他 agent 点掉（实测发生过首启弹窗
-  被人为确认）；断言要对这类干扰容错，别把弹窗状态当成唯一判据。
+- 测试窗口会真实弹出在屏幕上，可能被用户/其他 agent 干扰（实测发生过窗口状态
+  被人为改变的情况）；断言要对这类干扰容错，别把窗口瞬态当成唯一判据。
 
 ## 5. 排障
 
