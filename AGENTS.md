@@ -17,8 +17,9 @@ cd gui && node scripts/package-app.mjs     # 打包 release/xharness.app + mac-<
 ```
 
 杀 GUI 进程用 `pkill -f "MacOS/xharness"`（Electron bundle 已被 postinstall 改名为
-xharness.app，匹配 "Electron" 会失手）。GUI 调试：加 `--remote-debugging-port=9223`
-后可用原生 WebSocket 直连 CDP 执行 JS（cua 等工具不认自定义 bundle id）。
+xharness.app，匹配 "Electron" 会失手）。GUI 调试/测试走 CDP
+（`--remote-debugging-port=9223` + 原生 WebSocket 直连，`gui/scripts/cdp-eval.mjs`
+驱动），完整方案与标准冒烟检查见 `docs/cdp-testing.md`。
 
 ## 仓库形态
 
@@ -129,6 +130,10 @@ hook 脚本必须零依赖 Node（打包版靠 `ELECTRON_RUN_AS_NODE=1` 跑 `${N
 - E2E 约定（test/e2e/）：DeepSeek + `deepseek-v4-flash`、mkdtemp 沙箱、提示词禁破坏性
   命令且有 `assertNoDestructiveCommands` 审计、断言产物/退出码优先 + 工具子序列
   （禁全序列指纹）、retry 1 次、无 key skip。
+- **GUI 验证闭环（强制）**：每个 issue/feature 完成后必须重启开发环境——
+  `npm run build` 后以 `--remote-debugging-port=9223` 重启 GUI，按
+  `docs/cdp-testing.md` 的方案做详细测试（标准冒烟三段 + 针对本次改动追加的断言），
+  全部通过才算完成。
 - 依赖最小化：运行时仅 `@anthropic-ai/sdk` + `gray-matter`（GUI 另有 marked/dompurify）；
   ripgrep 为硬依赖无 JS 回退；新增依赖需先在 GOAL.md 层面确认。
 - git：每完成一组改动即用中文提交信息 commit；`dist/`、`release/` 不入库。
