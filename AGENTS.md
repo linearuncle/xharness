@@ -106,6 +106,9 @@ tool_use/tool_result 配对中间则**向旧侧扩窗**（宁多保留不拆对�
   （禁全序列指纹）、retry 1 次、无 key skip。
 - 依赖最小化：运行时仅 `@anthropic-ai/sdk` + `gray-matter`（GUI 另有 marked/dompurify）；
   ripgrep 为硬依赖无 JS 回退；新增依赖需先在 GOAL.md 层面确认。
-- git：每完成一组改动即用中文提交信息 commit；`dist/`、`release/` 不入库。
+- **每次改动后必须 git 提交 + 自测**（不要等用户提醒）：
+  1. 自测：相关改动至少跑 `npx tsc --noEmit` 与 `npm test`（或触及的单测）；改核心/GUI
+     依赖 dist 时先 `npm run build`；能冒烟则 `node dist/index.js -p "..."`。
+  2. git：用中文简述提交信息 commit；无远程仓库时只 commit、不 push；`dist/`、`release/` 不入库。
 - 单文件不超过 500 行；rg 内容搜索；模型 ID 以 DeepSeek 官方文档为准
   （`deepseek-chat` 等旧名已停用）。
