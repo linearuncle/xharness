@@ -312,6 +312,7 @@ body {
 .prov-row.active { background: #ececea; }
 .prov-row .dot { width: 7px; height: 7px; border-radius: 4px; margin-left: auto; background: #c9c9c6; }
 .prov-row .dot.on { background: #22c55e; }
+.prov-row .dot.err { background: #ef4444; }
 .prov-row.add { color: var(--text-2); font-weight: 400; }
 #prov-detail { flex: 1; padding: 22px 26px; }
 .pd-header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
@@ -321,6 +322,7 @@ body {
   border: 1px solid var(--card-border); color: var(--text-2);
 }
 .pd-badge.on { background: #dcfce7; color: #15803d; border-color: #bbf7d0; }
+.pd-badge.err { background: #fee2e2; color: #b91c1c; border-color: #fecaca; }
 .pd-del { margin-left: auto; }
 #prov-detail label { display: block; font-size: 13px; color: var(--text-2); margin: 14px 0 6px; }
 #prov-detail input[type="text"], #prov-detail input[type="password"], #prov-detail select {

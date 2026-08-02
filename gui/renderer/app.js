@@ -18,8 +18,25 @@ const S = {
 const EFFORT_LABEL = { "": "默认", none: "关闭", low: "低", high: "高", max: "Max" };
 const modelShort = (m) => (m ? m.replace(/^deepseek-/, "") : "未配置");
 
+/** 是否已配置可用的 API Key（含已落盘 hasKey，或编辑中刚输入的 apiKey） */
+function hasApiKey(p) {
+  return !!(p?.hasKey || (typeof p?.apiKey === "string" && p.apiKey.trim()));
+}
+
+/** 供应商就绪状态：启用且有 key 才算真正可用 */
+function isProviderReady(p) {
+  return !!(p?.enabled && hasApiKey(p) && p.models?.length);
+}
+
+/** 设置页状态文案与样式类：已禁用 / 未配置(红) / 已启用(绿) */
+function providerStatus(p) {
+  if (!p?.enabled) return { cls: "", label: "已禁用", dot: "" };
+  if (!hasApiKey(p)) return { cls: " err", label: "未配置", dot: " err" };
+  return { cls: " on", label: "已启用", dot: " on" };
+}
+
 function defaultChoice() {
-  const p = S.providers.find((x) => x.enabled && x.models?.length);
+  const p = S.providers.find((x) => isProviderReady(x));
   return p ? { providerId: p.id, model: p.models[0].id } : { providerId: null, model: "" };
 }
 
@@ -582,9 +599,9 @@ function renderModelOptions() {
   m.innerHTML = `<div class="mm-row" id="mm-back">‹ 模型</div><div class="mm-sub"></div>`;
   $("mm-back").onclick = renderModelMenuRoot;
   const sub = m.querySelector(".mm-sub");
-  const enabled = S.providers.filter((p) => p.enabled && p.models?.length);
+  const enabled = S.providers.filter((p) => isProviderReady(p));
   if (!enabled.length) {
-    sub.appendChild(el(`<div class="mm-group">暂无可用供应商，请到设置中配置</div>`));
+    sub.appendChild(el(`<div class="mm-group">暂无可用供应商，请到设置中填写 API Key</div>`));
     return;
   }
   for (const p of enabled) {
@@ -778,7 +795,7 @@ function closeSettings() {
   $("settings-view").classList.add("hidden");
   // 供应商可能变化，校正当前选择
   const stillValid = S.providers.some(
-    (p) => p.id === S.meta.providerId && p.enabled && p.models?.some((m) => m.id === S.meta.model)
+    (p) => p.id === S.meta.providerId && isProviderReady(p) && p.models?.some((m) => m.id === S.meta.model)
   );
   if (!stillValid) S.meta = { ...defaultChoice(), effort: S.meta.effort };
   updateModelLabel();
@@ -799,8 +816,9 @@ function renderProviderList() {
   if (S.settings.draft && !rows.some((p) => p.id === S.settings.draft.id))
     rows.push(S.settings.draft);
   for (const p of rows) {
+    const st = providerStatus(p);
     const r = el(
-      `<div class="prov-row${p.id === S.settings.activeProviderId ? " active" : ""}">🗄 <span>${esc(p.name || "未命名")}</span><span class="dot${p.enabled ? " on" : ""}"></span></div>`
+      `<div class="prov-row${p.id === S.settings.activeProviderId ? " active" : ""}">🗄 <span>${esc(p.name || "未命名")}</span><span class="dot${st.dot}"></span></div>`
     );
     r.onclick = () => {
       if (S.settings.draft && p.id !== S.settings.draft.id) S.settings.draft = null;
@@ -812,6 +830,12 @@ function renderProviderList() {
   }
 }
 
+function applyProviderBadge(badgeEl, p) {
+  const st = providerStatus(p);
+  badgeEl.className = `pd-badge${st.cls}`;
+  badgeEl.textContent = st.label;
+}
+
 function renderProviderDetail() {
   const box = $("prov-detail");
   const p = currentProvider();
@@ -820,16 +844,21 @@ function renderProviderDetail() {
   const work = isDraft ? p : structuredClone(p); // 已存在的编辑基于副本，保存时落盘
 
   box.innerHTML = "";
+  const st0 = providerStatus(work);
   const header = el(`<div class="pd-header">
       <span class="pd-name">${esc(work.name || "新供应商")}</span>
-      <span class="pd-badge${work.enabled ? " on" : ""}" id="pd-toggle">${work.enabled ? "已启用" : "已禁用"}</span>
+      <span class="pd-badge${st0.cls}" id="pd-toggle">${st0.label}</span>
       ${work.builtin ? "" : `<span class="icon-btn pd-del" id="pd-del" title="删除">🗑</span>`}
     </div>`);
   box.appendChild(header);
-  header.querySelector("#pd-toggle").onclick = () => {
+  const badgeEl = header.querySelector("#pd-toggle");
+  badgeEl.onclick = () => {
     work.enabled = !work.enabled;
-    header.querySelector("#pd-toggle").className = `pd-badge${work.enabled ? " on" : ""}`;
-    header.querySelector("#pd-toggle").textContent = work.enabled ? "已启用" : "已禁用";
+    applyProviderBadge(badgeEl, work);
+    if (isDraft) {
+      // draft 本身就在列表数据源里，刷新圆点
+      renderProviderList();
+    }
   };
   const delBtn = header.querySelector("#pd-del");
   if (delBtn) delBtn.onclick = async () => {
@@ -866,7 +895,11 @@ function renderProviderDetail() {
     </div>`);
   box.appendChild(keyRow);
   const keyInp = keyRow.querySelector("input");
-  keyInp.oninput = () => (work.apiKey = keyInp.value.trim());
+  keyInp.oninput = () => {
+    work.apiKey = keyInp.value.trim();
+    applyProviderBadge(badgeEl, work);
+    if (isDraft) renderProviderList();
+  };
   keyRow.querySelector(".icon-btn").onclick = () => {
     keyInp.type = keyInp.type === "password" ? "text" : "password";
   };
