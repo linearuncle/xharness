@@ -7,7 +7,7 @@
 // 全部只追加不重写；启动时重放重建内存态。
 import {
   readFileSync, writeFileSync, appendFileSync, mkdirSync,
-  readdirSync, existsSync, renameSync, rmSync, chmodSync,
+  readdirSync, chmodSync,
 } from "node:fs";
 import { homedir } from "node:os";
 import { join, basename } from "node:path";
@@ -27,7 +27,7 @@ const PROJECTS_FILE = join(DIR, "projects.jsonl");
 const SETTINGS_FILE = join(DIR, "settings.jsonl");
 
 let projects = []; // [{dir}]
-let conversations = {}; // id -> {projectDir,title,pinned,createdAt,blocks}
+let conversations = {}; // id -> {projectDir,title,createdAt,blocks}
 let providers = []; // 模型供应商（settings.jsonl 重放）
 let appearance = null; // 外观设置（settings.jsonl 重放；null = 默认）
 let general = null; // 通用设置（settings.jsonl 重放；null = 默认）
@@ -119,14 +119,12 @@ function replaySession(id) {
   const c = {
     projectDir: meta.projectDir,
     title: meta.title ?? "新对话",
-    pinned: false,
     createdAt: meta.createdAt ?? 0,
     blocks: [],
   };
   for (const r of rows.slice(1)) {
     if (r.kind === "meta_update") {
       if (r.title !== undefined) c.title = r.title;
-      if (r.pinned !== undefined) c.pinned = r.pinned;
     } else if (r.kind === "clear") {
       c.blocks = [];
     } else {
@@ -312,7 +310,7 @@ export function newConversation(projectDir) {
   const id = `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const createdAt = Date.now();
   conversations[id] = {
-    projectDir, title: "新对话", pinned: false, createdAt, blocks: [],
+    projectDir, title: "新对话", createdAt, blocks: [],
   };
   writeFileSync(sessFile(id), line({ kind: "meta", id, projectDir, title: "新对话", createdAt }));
   return id;
@@ -330,19 +328,6 @@ export function setTitle(id, title) {
     return true;
   }
   return false;
-}
-
-export function setPinned(id, pinned) {
-  const c = conversations[id];
-  if (c) {
-    c.pinned = pinned;
-    appendLine(sessFile(id), { kind: "meta_update", pinned, ts: Date.now() });
-  }
-}
-
-export function deleteConversation(id) {
-  delete conversations[id];
-  try { rmSync(sessFile(id)); } catch { /* 已不存在 */ }
 }
 
 export function appendBlock(id, block) {
@@ -365,13 +350,11 @@ export function sidebarData() {
   const convs = Object.entries(conversations).map(([id, c]) => ({
     id,
     title: c.title,
-    pinned: !!c.pinned,
     projectDir: c.projectDir,
     createdAt: c.createdAt,
   }));
   convs.sort((a, b) => a.createdAt - b.createdAt);
   return {
-    pinned: convs.filter((c) => c.pinned),
     projects: projects.map((p) => ({
       dir: p.dir,
       name: basename(p.dir),

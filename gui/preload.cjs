@@ -5,8 +5,6 @@ contextBridge.exposeInMainWorld("api", {
   addProject: () => ipcRenderer.invoke("project:add"),
   newConversation: (projectDir) => ipcRenderer.invoke("conv:new", projectDir),
   openConversation: (id) => ipcRenderer.invoke("conv:open", id),
-  pinConversation: (id, pinned) => ipcRenderer.invoke("conv:pin", { id, pinned }),
-  deleteConversation: (id) => ipcRenderer.invoke("conv:delete", id),
   setModelChoice: (id, projectDir, providerId, model) =>
     ipcRenderer.invoke("conv:setModelChoice", { id, projectDir, providerId, model }),
   getSettings: () => ipcRenderer.invoke("settings:get"),

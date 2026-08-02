@@ -4,7 +4,7 @@ const $ = (id) => document.getElementById(id);
 const S = {
   providers: [],
   efforts: [],
-  sidebar: { pinned: [], projects: [] },
+  sidebar: { projects: [] },
   activeProject: null, // dir
   activeConv: null, // id
   // running/askPending 是"激活会话"状态的镜像，供输入区判定用；
@@ -61,14 +61,6 @@ function defaultChoice() {
 
 function renderSidebar() {
   const sb = S.sidebar;
-  const pinnedWrap = $("sb-pinned-section");
-  const pinnedEl = $("sb-pinned");
-  pinnedEl.innerHTML = "";
-  if (sb.pinned.length) {
-    pinnedWrap.classList.remove("hidden");
-    for (const c of sb.pinned) pinnedEl.appendChild(convRow(c, true));
-  } else pinnedWrap.classList.add("hidden");
-
   const wrap = $("sb-projects");
   wrap.innerHTML = "";
   for (const p of sb.projects) {
@@ -79,13 +71,13 @@ function renderSidebar() {
     row.innerHTML = `<span class="ic">🗂</span><span>${esc(p.name)}</span>`;
     row.onclick = () => selectProject(p.dir);
     wrap.appendChild(row);
-    for (const c of p.conversations) wrap.appendChild(convRow(c, false));
+    for (const c of p.conversations) wrap.appendChild(convRow(c));
   }
 }
 
-function convRow(c, pinned) {
+function convRow(c) {
   const el = document.createElement("div");
-  el.className = "sb-conv" + (pinned ? " sb-pinned-conv" : "");
+  el.className = "sb-conv";
   if (c.id === S.activeConv) el.classList.add("active");
   el.innerHTML =
     `<span class="sb-conv-title">${esc(c.title)}</span>` +
@@ -114,16 +106,6 @@ function showConvMenu(e, c) {
   };
   mk("拷贝 session id", async () => {
     await navigator.clipboard.writeText(c.id);
-  });
-  mk(c.pinned ? "取消置顶" : "置顶", async () => {
-    S.sidebar = await api.pinConversation(c.id, !c.pinned);
-    renderSidebar();
-  });
-  mk("删除", async () => {
-    S.sidebar = await api.deleteConversation(c.id);
-    S.views.delete(c.id);
-    if (S.activeConv === c.id) showEmpty();
-    renderSidebar();
   });
   document.body.appendChild(m);
   setTimeout(() => document.addEventListener("click", () => m.remove(), { once: true }));

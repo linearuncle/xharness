@@ -150,7 +150,6 @@ body {
 }
 @keyframes sb-spin { to { transform: rotate(360deg); } }
 .sb-conv-title { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.sb-pinned-conv { padding-left: 10px; }
 
 .sb-footer {
   border-top: 1px solid var(--border); padding: 12px 16px;

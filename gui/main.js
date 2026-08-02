@@ -619,16 +619,6 @@ ipcMain.handle("conv:open", (_e, id) => {
   };
 });
 
-ipcMain.handle("conv:pin", (_e, { id, pinned }) => {
-  store.setPinned(id, pinned);
-  return store.sidebarData();
-});
-
-ipcMain.handle("conv:delete", (_e, id) => {
-  store.deleteConversation(id);
-  return store.sidebarData();
-});
-
 ipcMain.handle("conv:setModelChoice", (_e, { id, providerId, model }) => {
   const c = store.getConversation(id);
   if (c) {
