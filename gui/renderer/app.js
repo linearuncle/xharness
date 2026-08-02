@@ -403,20 +403,47 @@ function onAgentEvent({ id, event }) {
     case "tool_start": {
       leaveThinking(t);
       endTextSeg(t);
-      if (event.name === "TodoWrite" || event.name === "AskUserQuestion") break;
+      // TodoWrite / AskUserQuestion 有专用 UI；仍缓存 input，供 tool_end 写详细日志
       const summary = toolSummary(event.name, event.input);
-      const line = toolLineEl(summary, false, true);
-      t.container.appendChild(line);
-      t.toolLines.set(event.id, { line, summary });
+      let line = null;
+      if (event.name !== "TodoWrite" && event.name !== "AskUserQuestion") {
+        line = toolLineEl(summary, false, true);
+        t.container.appendChild(line);
+      }
+      t.toolLines.set(event.id, {
+        line,
+        summary,
+        name: event.name,
+        input: event.input,
+      });
       break;
     }
     case "tool_end": {
       const rec = t.toolLines.get(event.id);
-      if (rec) {
-        rec.line.querySelector(".t-ic").textContent = event.isError ? "✕" : "▸";
-        if (event.isError) rec.line.classList.add("err");
-        t.blocks.push({ kind: "tool", summary: rec.summary, isError: !!event.isError });
+      const name = rec?.name ?? event.name;
+      const input = rec?.input ?? {};
+      const summary = rec?.summary ?? toolSummary(name, input);
+      const isError = !!event.isError;
+      const result = typeof event.result === "string" ? event.result : String(event.result ?? "");
+      if (rec?.line) {
+        rec.line.querySelector(".t-ic").textContent = isError ? "✕" : "▸";
+        if (isError) {
+          rec.line.classList.add("err");
+          // 悬停可看错误正文（session 日志另有完整截断字段）
+          if (result) rec.line.title = result.length > 800 ? result.slice(0, 800) + "…" : result;
+        }
       }
+      // session JSONL 诊断字段：name/input/result；大字段截断防日志膨胀
+      t.blocks.push({
+        kind: "tool",
+        id: event.id,
+        name,
+        summary,
+        isError,
+        input: clipToolInput(input),
+        result: clipToolResult(result, isError),
+      });
+      t.toolLines.delete(event.id);
       break;
     }
     case "todos": {
@@ -538,6 +565,58 @@ function toolSummary(name, input) {
   }
 }
 const short = (p) => (typeof p === "string" ? p.split("/").slice(-3).join("/") : "");
+
+/** session 日志：单字段最大字符数（错误结果放宽，便于排障） */
+const TOOL_LOG_INPUT_MAX = 4000;
+const TOOL_LOG_RESULT_OK = 4000;
+const TOOL_LOG_RESULT_ERR = 12000;
+
+/** 截断长字符串，附剩余长度提示 */
+function clipStr(s, max) {
+  if (typeof s !== "string") s = s == null ? "" : String(s);
+  if (s.length <= max) return s;
+  return `${s.slice(0, max)}\n…[+${s.length - max} chars truncated]`;
+}
+
+/**
+ * 工具入参落盘：保留结构；过长 string 字段就地截断，避免 Write 等内容撑爆 jsonl。
+ * 返回可 JSON 序列化的普通对象（不原地改 event.input）。
+ */
+function clipToolInput(input) {
+  if (input == null || typeof input !== "object") return input ?? {};
+  try {
+    const raw = JSON.stringify(input);
+    if (raw.length <= TOOL_LOG_INPUT_MAX) return input;
+  } catch {
+    return { _unserializable: true };
+  }
+  const out = Array.isArray(input) ? [] : {};
+  for (const [k, v] of Object.entries(input)) {
+    if (typeof v === "string" && v.length > 800) {
+      out[k] = `${v.slice(0, 800)}…[+${v.length - 800} chars]`;
+    } else if (v && typeof v === "object") {
+      try {
+        const s = JSON.stringify(v);
+        out[k] = s.length > 800 ? { _truncated: true, preview: s.slice(0, 800) } : v;
+      } catch {
+        out[k] = "[unserializable]";
+      }
+    } else {
+      out[k] = v;
+    }
+  }
+  try {
+    const s = JSON.stringify(out);
+    if (s.length <= TOOL_LOG_INPUT_MAX) return out;
+    return { _truncated: true, preview: s.slice(0, TOOL_LOG_INPUT_MAX) };
+  } catch {
+    return { _unserializable: true };
+  }
+}
+
+function clipToolResult(result, isError) {
+  return clipStr(result, isError ? TOOL_LOG_RESULT_ERR : TOOL_LOG_RESULT_OK);
+}
 
 function toolLineEl(summary, isError, running = false) {
   return el(

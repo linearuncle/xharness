@@ -2,6 +2,7 @@
 //   projects.jsonl        —— 每行 {op:"add"|"remove", dir, ts}
 //   sessions/<id>.jsonl   —— 首行 {kind:"meta",...}；此后每行一个 block；
 //                            标题/置顶经 {kind:"meta_update"} 行；/clear 经 {kind:"clear"} 行
+//                            tool 块字段：name/id/summary/isError/input/result（input·result 可截断）
 //   settings.jsonl        —— 供应商 upsert/delete 事件（权限 600，key 明文，换 key 整文件重写）
 // 全部只追加不重写；启动时重放重建内存态。
 import {
