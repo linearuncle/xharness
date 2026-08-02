@@ -3,7 +3,6 @@ const $ = (id) => document.getElementById(id);
 
 const S = {
   providers: [],
-  envKeyPresent: false,
   efforts: [],
   sidebar: { pinned: [], projects: [] },
   activeProject: null, // dir
@@ -646,7 +645,6 @@ function scrollBottom(force) {
 async function boot() {
   const st = await api.getState();
   S.providers = st.providers;
-  S.envKeyPresent = st.envKeyPresent;
   S.efforts = st.efforts;
   S.sidebar = st.sidebar;
   S.meta = { ...defaultChoice(), effort: "" };
@@ -756,7 +754,7 @@ function bindSettings() {
     const id = `p${Date.now().toString(36)}`;
     S.settings.draft = {
       id, name: "", baseUrl: "", apiFormat: "anthropic",
-      keyMode: "manual", apiKey: "", enabled: true, builtin: false, models: [],
+      apiKey: "", enabled: true, builtin: false, models: [],
     };
     S.settings.activeProviderId = id;
     renderProviderList();
@@ -860,41 +858,18 @@ function renderProviderDetail() {
 
   field("API 格式", `<select disabled><option>Anthropic Messages (/v1/messages)</option></select>`);
 
-  // API Key：环境变量 / 手动
+  // API Key：仅手动填写
   box.appendChild(el(`<label>API Key</label>`));
-  const seg = el(`<div class="seg">
-      <span class="${work.keyMode === "env" ? "on" : ""}" data-m="env">环境变量</span>
-      <span class="${work.keyMode === "manual" ? "on" : ""}" data-m="manual">手动填写</span>
+  const keyRow = el(`<div class="key-row">
+      <input type="password" placeholder="${work.hasKey ? "已保存（留空保持不变）" : "输入 API Key"}" value="" />
+      <span class="icon-btn" title="显示/隐藏">👁</span>
     </div>`);
-  box.appendChild(seg);
-  const keyArea = el(`<div></div>`);
-  box.appendChild(keyArea);
-  const renderKeyArea = () => {
-    if (work.keyMode === "env") {
-      keyArea.innerHTML = `<div class="env-hint${S.envKeyPresent ? " ok" : ""}">
-        使用环境变量 ANTHROPIC_API_KEY / DEEPSEEK_API_KEY —— 当前${S.envKeyPresent ? "已检测到 ✓" : "未检测到，启动应用前请先设置"}</div>`;
-    } else {
-      keyArea.innerHTML = "";
-      const row = el(`<div class="key-row">
-          <input type="password" placeholder="${work.hasKey ? "已保存（留空保持不变）" : "输入 API Key"}" value="" />
-          <span class="icon-btn" title="显示/隐藏">👁</span>
-        </div>`);
-      const inp = row.querySelector("input");
-      inp.oninput = () => (work.apiKey = inp.value.trim());
-      row.querySelector(".icon-btn").onclick = () => {
-        inp.type = inp.type === "password" ? "text" : "password";
-      };
-      keyArea.appendChild(row);
-    }
+  box.appendChild(keyRow);
+  const keyInp = keyRow.querySelector("input");
+  keyInp.oninput = () => (work.apiKey = keyInp.value.trim());
+  keyRow.querySelector(".icon-btn").onclick = () => {
+    keyInp.type = keyInp.type === "password" ? "text" : "password";
   };
-  seg.querySelectorAll("span").forEach((sp) => {
-    sp.onclick = () => {
-      work.keyMode = sp.dataset.m;
-      seg.querySelectorAll("span").forEach((x) => x.classList.toggle("on", x === sp));
-      renderKeyArea();
-    };
-  });
-  renderKeyArea();
 
   // 模型列表
   box.appendChild(el(`<label>模型列表</label>`));

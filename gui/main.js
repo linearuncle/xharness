@@ -104,7 +104,6 @@ ipcMain.handle("state:get", () => ({
   sidebar: store.sidebarData(),
   providers: store.getProvidersSafe(),
   efforts: engine.EFFORTS,
-  envKeyPresent: !!(process.env.ANTHROPIC_API_KEY || process.env.DEEPSEEK_API_KEY),
   yoloAcked: existsSync(ACK_FILE),
 }));
 
@@ -116,7 +115,6 @@ ipcMain.handle("yolo:ack", () => {
 
 ipcMain.handle("settings:get", () => ({
   providers: store.getProvidersSafe(),
-  envKeyPresent: !!(process.env.ANTHROPIC_API_KEY || process.env.DEEPSEEK_API_KEY),
 }));
 
 ipcMain.handle("settings:upsert", (_e, provider) => {

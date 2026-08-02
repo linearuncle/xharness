@@ -330,14 +330,7 @@ body {
 #prov-detail input:focus { border-color: #b9b9b6; }
 .key-row { display: flex; gap: 8px; align-items: center; }
 .key-row input { flex: 1; }
-.seg {
-  display: inline-flex; border: 1px solid var(--card-border); border-radius: 9px; overflow: hidden;
-  font-size: 12.5px; margin-bottom: 8px;
-}
-.seg span { padding: 5px 12px; cursor: pointer; color: var(--text-2); }
-.seg span.on { background: #1a1a1a; color: #fff; }
 .env-hint { font-size: 12.5px; color: var(--text-3); margin-top: 6px; }
-.env-hint.ok { color: #15803d; }
 .model-row {
   display: flex; align-items: center; gap: 10px; border: 1px solid var(--card-border);
   border-radius: 9px; padding: 8px 12px; margin: 6px 0; font-size: 13.5px;

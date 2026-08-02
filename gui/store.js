@@ -13,7 +13,7 @@ import { join, basename } from "node:path";
 
 // 数据目录：macOS 惯例的应用数据位置（不用 app.getPath——本模块在 app.setName 前被 import）。
 // 手填 API Key 以明文存于 settings.jsonl（权限 600）：不碰钥匙串（ad-hoc 签名下每次
-// 重签都会触发授权弹框）；防同机其他用户靠文件权限，防离线泄露请优先用环境变量模式。
+// 重签都会触发授权弹框）；防同机其他用户靠文件权限。GUI 仅支持手动填写，不读环境变量。
 const DIR =
   process.platform === "darwin"
     ? join(homedir(), "Library", "Application Support", "xharness")
@@ -32,7 +32,6 @@ const DEFAULT_PROVIDER = {
   name: "DeepSeek",
   baseUrl: "https://api.deepseek.com/anthropic",
   apiFormat: "anthropic",
-  keyMode: "env", // env: 用 ANTHROPIC_API_KEY / DEEPSEEK_API_KEY；manual: 手填
   apiKey: "",
   enabled: true,
   builtin: true,
@@ -165,6 +164,8 @@ export function getProvidersSafe() {
 
 export function upsertProvider(p) {
   const clean = { ...p };
+  delete clean.keyMode; // 已废弃：GUI 仅手动填写，不再支持环境变量模式
+  delete clean.hasKey;
   const existing = providers.find((x) => x.id === p.id);
   if (!clean.apiKey && existing?.apiKey) {
     clean.apiKey = existing.apiKey; // 留空 = 保持原 key

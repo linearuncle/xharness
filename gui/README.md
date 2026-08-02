@@ -32,8 +32,7 @@ ANTHROPIC_API_KEY=你的key npm start
 - **模型菜单**：按供应商分组的模型列表、推理强度（关闭/低/高/极高）会话内切换
 - **设置界面**（侧栏底部 ⚙）：模型供应商管理——默认内置 DeepSeek（不可删）；
   可添加自定义供应商（名称 / Base URL / API Key / 模型列表），API 格式固定 Anthropic Messages；
-  API Key 支持两种模式：环境变量（ANTHROPIC_API_KEY / DEEPSEEK_API_KEY，界面显示检测状态）
-  或手动填写（可切换明文显示）；模型条目含模型 ID 与上下文窗口；
+  API Key **必须手动填写**（可切换明文显示，不读环境变量）；模型条目含模型 ID 与上下文窗口；
   配置持久化于 `~/Library/Application Support/xharness/settings.jsonl`（append-only，与会话数据同规范）
 - **上下文条**：项目名 · 本地 · git 分支；右上"环境信息"面板显示变更文件
 - **YOLO 提示**：橙色"⚠ 完全访问"徽标——与 CLI 相同，无沙箱、工具直接执行
@@ -52,7 +51,7 @@ GUI 与 CLI 完全一致：模型发起的文件读写与 shell 命令在你的�
 首次启动需勾选确认后方可使用。
 
 - 只在可信任务与非关键目录使用；重要数据先做好版本控制/备份
-- "手动填写"的 API Key **明文**存于 `~/Library/Application Support/xharness/settings.jsonl`（权限 600，防同机其他用户）；文件被拷走即泄露，更推荐环境变量模式
+- API Key **明文**存于 `~/Library/Application Support/xharness/settings.jsonl`（权限 600，防同机其他用户）；文件被拷走即泄露
 - 附件与粘贴的图片保存在 `~/Library/Application Support/xharness/attachments/`
 - 风险自负；威胁模型与漏洞报告见仓库根目录 `SECURITY.md`
 
@@ -69,5 +68,4 @@ ad-hoc 签名，首次打开若被 Gatekeeper 拦截，右键 → 打开。
 
 打包版已**内置 ripgrep**（Resources/bin/rg，MIT/Unlicense 可分发），用户无需 brew 安装。
 
-注意：**Finder 启动的应用不继承 shell 环境变量**，打包版请在设置中"手动填写"
-API Key，或用 `launchctl setenv ANTHROPIC_API_KEY ...` 注入。
+注意：GUI **不读** shell 环境变量中的 API Key，请在设置中手动填写。
