@@ -1,42 +1,27 @@
-// 持久化：JSONL（append-only 事件日志）
-//   ~/.xharness/gui/projects.jsonl        —— 每行 {op:"add"|"remove", dir, ts}
-//   ~/.xharness/gui/sessions/<id>.jsonl   —— 首行 {kind:"meta",...}；此后每行一个 block；
-//                                            标题/置顶经 {kind:"meta_update"} 行；/clear 经 {kind:"clear"} 行
-// 全部只追加不重写；启动时重放重建内存态。旧 state.json 自动迁移。
+// 持久化：JSONL（append-only 事件日志），数据目录见 DATA_DIR
+//   projects.jsonl        —— 每行 {op:"add"|"remove", dir, ts}
+//   sessions/<id>.jsonl   —— 首行 {kind:"meta",...}；此后每行一个 block；
+//                            标题/置顶经 {kind:"meta_update"} 行；/clear 经 {kind:"clear"} 行
+//   settings.jsonl        —— 供应商 upsert/delete 事件（权限 600，key 明文，换 key 整文件重写）
+// 全部只追加不重写；启动时重放重建内存态。
 import {
   readFileSync, writeFileSync, appendFileSync, mkdirSync,
   readdirSync, existsSync, renameSync, rmSync, chmodSync,
 } from "node:fs";
 import { homedir } from "node:os";
 import { join, basename } from "node:path";
-import { safeStorage } from "electron";
 
-// ---- API Key 加密（safeStorage：加密密钥存系统钥匙串，磁盘零明文）----
-function canEncrypt() {
-  try { return safeStorage.isEncryptionAvailable(); } catch { return false; }
-}
-function encryptKey(plain) {
-  if (!plain) return "";
-  if (!canEncrypt()) {
-    console.warn("store: safeStorage 不可用，拒绝保存明文 key");
-    return "";
-  }
-  return safeStorage.encryptString(plain).toString("base64");
-}
-function decryptKey(enc) {
-  if (!enc) return "";
-  try {
-    return safeStorage.decryptString(Buffer.from(enc, "base64"));
-  } catch {
-    return "";
-  }
-}
-
-const DIR = join(homedir(), ".xharness", "gui");
+// 数据目录：macOS 惯例的应用数据位置（不用 app.getPath——本模块在 app.setName 前被 import）。
+// 手填 API Key 以明文存于 settings.jsonl（权限 600）：不碰钥匙串（ad-hoc 签名下每次
+// 重签都会触发授权弹框）；防同机其他用户靠文件权限，防离线泄露请优先用环境变量模式。
+const DIR =
+  process.platform === "darwin"
+    ? join(homedir(), "Library", "Application Support", "xharness")
+    : join(homedir(), ".xharness", "gui");
+export const DATA_DIR = DIR;
 const SESS_DIR = join(DIR, "sessions");
 const PROJECTS_FILE = join(DIR, "projects.jsonl");
 const SETTINGS_FILE = join(DIR, "settings.jsonl");
-const LEGACY_FILE = join(DIR, "state.json");
 
 let projects = []; // [{dir}]
 let conversations = {}; // id -> {projectDir,title,pinned,createdAt,blocks}
@@ -107,33 +92,8 @@ function replaySession(id) {
   return c;
 }
 
-function migrateLegacy() {
-  if (!existsSync(LEGACY_FILE)) return;
-  try {
-    const legacy = JSON.parse(readFileSync(LEGACY_FILE, "utf8"));
-    for (const p of legacy.projects ?? []) {
-      appendLine(PROJECTS_FILE, { op: "add", dir: p.dir, ts: Date.now() });
-    }
-    for (const [id, c] of Object.entries(legacy.conversations ?? {})) {
-      if (existsSync(sessFile(id))) continue;
-      let out = line({
-        kind: "meta", id, projectDir: c.projectDir,
-        title: c.title, createdAt: c.createdAt ?? Date.now(),
-      });
-      if (c.pinned) out += line({ kind: "meta_update", pinned: true, ts: Date.now() });
-      for (const b of c.blocks ?? []) out += line(b);
-      writeFileSync(sessFile(id), out);
-    }
-    renameSync(LEGACY_FILE, LEGACY_FILE + ".bak");
-    console.log("store: 已迁移旧 state.json 至 JSONL");
-  } catch (err) {
-    console.error("store: 旧数据迁移失败:", err.message);
-  }
-}
-
 export function load() {
   mkdirSync(SESS_DIR, { recursive: true });
-  migrateLegacy();
 
   projects = [];
   for (const r of readLines(PROJECTS_FILE)) {
@@ -170,22 +130,6 @@ export function load() {
     appendLine(SETTINGS_FILE, { op: "upsert", provider: DEFAULT_PROVIDER, ts: Date.now() });
   }
 
-  // 明文 key 迁移：内存态加密 + 整文件重写，清除历史行里的明文
-  let raw = "";
-  try { raw = readFileSync(SETTINGS_FILE, "utf8"); } catch { /* 无文件 */ }
-  const hasPlaintextOnDisk = /"apiKey"\s*:\s*"[^"]+"/.test(raw);
-  let migrated = false;
-  for (const p of providers) {
-    if (p.apiKey) {
-      p.apiKeyEnc = encryptKey(p.apiKey);
-      delete p.apiKey;
-      migrated = true;
-    }
-  }
-  if (migrated || hasPlaintextOnDisk) {
-    rewriteSettings();
-    console.log("store: 已迁移 API Key 至加密存储并清除历史明文");
-  }
   try { chmodSync(SETTINGS_FILE, 0o600); } catch { /* 文件可能不存在 */ }
 
   return { projects, conversations };
@@ -201,39 +145,34 @@ function rewriteSettings() {
   try { chmodSync(SETTINGS_FILE, 0o600); } catch { /* noop */ }
 }
 
-// 解密取 key（仅主进程内部使用，不经 IPC）
+// 取 key（仅主进程内部使用，不经 IPC）
 export function getProviderKey(id) {
   const p = providers.find((x) => x.id === id);
-  if (!p) return "";
-  if (p.apiKeyEnc) return decryptKey(p.apiKeyEnc);
-  return p.apiKey ?? "";
+  return p?.apiKey ?? "";
 }
 
 export function getProviders() {
   return providers;
 }
 
-// 给渲染进程的脱敏视图：既不下发明文也不下发密文
+// 给渲染进程的脱敏视图：key 不经 IPC 下发
 export function getProvidersSafe() {
   return providers.map((p) => {
-    const { apiKey, apiKeyEnc, ...rest } = p;
-    return { ...rest, apiKey: "", hasKey: !!(apiKeyEnc || apiKey) };
+    const { apiKey, ...rest } = p;
+    return { ...rest, apiKey: "", hasKey: !!apiKey };
   });
 }
 
 export function upsertProvider(p) {
   const clean = { ...p };
   const existing = providers.find((x) => x.id === p.id);
-  if (clean.apiKey) {
-    clean.apiKeyEnc = encryptKey(clean.apiKey); // 新输入的明文 → 立即加密
-  } else if (existing?.apiKeyEnc) {
-    clean.apiKeyEnc = existing.apiKeyEnc; // 留空 = 保持原 key
+  if (!clean.apiKey && existing?.apiKey) {
+    clean.apiKey = existing.apiKey; // 留空 = 保持原 key
   }
-  delete clean.apiKey;
   const i = providers.findIndex((x) => x.id === clean.id);
   if (i >= 0) providers[i] = clean;
   else providers.push(clean);
-  // 换 key 属敏感变更：整文件重写，不在历史里留旧密文
+  // 换 key 属敏感变更：整文件重写，不在历史行里残留旧 key
   rewriteSettings();
 }
 

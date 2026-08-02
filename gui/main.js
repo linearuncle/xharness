@@ -4,14 +4,14 @@ import {
 } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, basename, resolve } from "node:path";
-import { userInfo, homedir } from "node:os";
+import { userInfo } from "node:os";
 import { marked } from "marked";
 import * as store from "./store.js";
 import * as engine from "./engine.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const ATT_DIR = join(homedir(), ".xharness", "gui", "attachments");
-const ACK_FILE = join(homedir(), ".xharness", "gui", "yolo-ack");
+const ATT_DIR = join(store.DATA_DIR, "attachments");
+const ACK_FILE = join(store.DATA_DIR, "yolo-ack");
 let win = null;
 
 app.setName("xharness");
@@ -123,9 +123,8 @@ ipcMain.handle("settings:upsert", (_e, provider) => {
   if (!provider?.id || !provider?.name || !provider?.baseUrl) {
     return { ok: false, error: "名称与 Base URL 必填" };
   }
-  // apiKey 留空表示"保持原 key"；非空明文由 store 层立即加密落盘
+  // apiKey 留空表示"保持原 key"（明文由 store 层落盘，600 权限）
   delete provider.hasKey;
-  delete provider.apiKeyEnc; // 密文不接受来自渲染进程
   store.upsertProvider(provider);
   return { ok: true, providers: store.getProvidersSafe() };
 });
