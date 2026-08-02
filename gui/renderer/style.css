@@ -25,6 +25,33 @@
   --font-code: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
   --sb-bg-translucent: rgba(247, 247, 245, .6);
 }
+/* 首帧兜底：深色系统下 JS 应用主题前（约几十 ms）按默认深色主题上色，避免闪白。
+ * 数值 = Default 预设深色 + 对比度 50 的推导结果；theme.js 随后以行内变量整套覆写。 */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #181818;
+    --sb-bg: #202020;
+    --panel: #242424;
+    --border: #303030;
+    --card-border: #333333;
+    --text: #ffffff;
+    --text-2: #b3b3b3;
+    --text-3: #797979;
+    --hover: #272727;
+    --active: #303030;
+    --bubble: #282828;
+    --code-bg: #282828;
+    --inline-code-bg: #2c2c2c;
+    --btn-primary-bg: #ffffff;
+    --btn-primary-fg: #181818;
+    --accent: #339cff;
+    --accent-soft: rgba(51, 156, 255, .28);
+    --link: #339cff;
+    --shadow: rgba(0, 0, 0, .5);
+    --window-border: rgba(255, 255, 255, .22);
+    --sb-bg-translucent: rgba(32, 32, 32, .55);
+  }
+}
 html, body { height: 100%; background: var(--bg); }
 /* 半透明侧栏：窗口 vibrancy 需从 html 一路透明到侧栏层 */
 html.translucent-sb, html.translucent-sb body { background: transparent; }
