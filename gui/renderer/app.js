@@ -7,9 +7,11 @@ const S = {
   sidebar: { pinned: [], projects: [] },
   activeProject: null, // dir
   activeConv: null, // id
+  // running/askPending 是"激活会话"状态的镜像，供输入区判定用；
+  // 各会话的真实状态按 convId 存于 views，切走不丢、切回原样恢复
   running: false,
   askPending: false,
-  turn: null, // 当前流式回合的渲染状态
+  views: new Map(), // convId -> { root, turn, running, askPending }
   meta: { providerId: null, model: "", effort: "" },
   settings: { activeProviderId: null, draft: null }, // 设置界面状态
   plugins: [], // 设置-插件页列表（主进程纯数据视图）
@@ -113,6 +115,7 @@ function showConvMenu(e, c) {
   });
   mk("删除", async () => {
     S.sidebar = await api.deleteConversation(c.id);
+    S.views.delete(c.id);
     if (S.activeConv === c.id) showEmpty();
     renderSidebar();
   });
@@ -130,8 +133,19 @@ async function selectProject(dir) {
   renderSidebar();
 }
 
+// 无在途回合的视图随时可按持久化块重建，切走时丢弃以省内存；
+// 有在途回合的视图必须保留——流式事件会持续渲染进它的（离屏）DOM
+function dropIdleView(id) {
+  const v = id ? S.views.get(id) : null;
+  if (v && !v.turn) S.views.delete(id);
+}
+
 function showEmpty() {
+  dropIdleView(S.activeConv);
   S.activeConv = null;
+  S.askPending = false;
+  setRunning(false);
+  $("input").placeholder = "随心输入";
   $("empty-state").classList.remove("hidden");
   $("chat-scroll").classList.add("hidden");
   $("chat-header").classList.add("hidden");
@@ -170,6 +184,7 @@ async function addProject() {
 async function openConversation(id) {
   const c = await api.openConversation(id);
   if (!c) return;
+  dropIdleView(S.activeConv);
   S.activeConv = id;
   S.activeProject = c.projectDir;
   S.meta = c.meta;
@@ -181,9 +196,26 @@ async function openConversation(id) {
   $("empty-state").classList.add("hidden");
   $("chat-scroll").classList.remove("hidden");
   $("chat-header").classList.remove("hidden");
+  // 有实时视图（含后台仍在运行的会话）直接挂上，流式现场原样接上；
+  // 否则按持久化块重建
+  let view = S.views.get(id);
+  if (!view) {
+    view = {
+      root: el(`<div class="conv-view"></div>`),
+      turn: null,
+      running: false,
+      askPending: false,
+    };
+    for (const b of c.blocks) renderStoredBlock(view.root, b);
+    S.views.set(id, view);
+  }
   const list = $("chat-list");
   list.innerHTML = "";
-  for (const b of c.blocks) renderStoredBlock(list, b);
+  list.appendChild(view.root);
+  // 输入区跟随该会话的真实状态恢复：运行中→停止按钮；待回答→回答语义
+  S.askPending = view.askPending;
+  setRunning(view.running);
+  $("input").placeholder = view.askPending ? "输入自由回答，或点击上方选项…" : "随心输入";
   renderSidebar();
   scrollBottom(true);
 }
@@ -247,7 +279,8 @@ async function sendCurrent() {
   if ($("chat-title").textContent === "" || $("chat-title").textContent === "新对话")
     $("chat-title").textContent = text.slice(0, 16);
 
-  const list = $("chat-list");
+  const view = S.views.get(S.activeConv);
+  const list = view.root;
   for (const a of S.attachments) {
     if (a.isImage) {
       list.appendChild(el(`<div class="msg-user"><img class="chat-img" src="xatt://a/${encodeURIComponent(a.fileName ?? a.name)}" alt="${esc(a.name)}" /></div>`));
@@ -256,7 +289,7 @@ async function sendCurrent() {
     }
   }
   list.appendChild(el(`<div class="msg-user"><div class="bubble">${esc(text)}</div></div>`));
-  beginTurn(list);
+  beginTurn(view);
   setRunning(true);
   scrollBottom(true);
   const paths = S.attachments.map((a) => a.path);
@@ -265,16 +298,16 @@ async function sendCurrent() {
   api.send(S.activeConv, text, paths);
 }
 
-function beginTurn(list) {
+function beginTurn(view) {
   const metaEl = el(`<div class="turn-meta">已处理 0s</div>`);
   const container = el(`<div class="turn"></div>`);
-  list.appendChild(metaEl);
-  list.appendChild(container);
+  view.root.appendChild(metaEl);
+  view.root.appendChild(container);
   const startTs = Date.now();
   const timer = setInterval(() => {
     metaEl.textContent = `已处理 ${Math.round((Date.now() - startTs) / 1000)}s`;
   }, 1000);
-  S.turn = {
+  view.turn = {
     container, metaEl, timer, startTs,
     curTextEl: null, curText: "",
     curRenderTimer: null, renderSeq: 0,
@@ -282,6 +315,7 @@ function beginTurn(list) {
     textSegs: [], toolLines: new Map(), blocks: [{ kind: "divider" }],
     todoEl: null, askEl: null,
   };
+  view.running = true;
 }
 
 function leaveThinking(t) {
@@ -367,9 +401,17 @@ async function flushSegRender(t) {
 }
 
 function onAgentEvent({ id, event }) {
-  if (id !== S.activeConv) return; // 简化：只渲染当前会话
-  const t = S.turn;
+  // 事件按会话路由进各自视图：后台会话的流式渲染进它的离屏 DOM，
+  // 切回时原样接上；只有激活会话才触碰输入区/滚动等全局 UI
+  if (event.type === "stats") {
+    S.statsByConv[id] = event.stats;
+    if (id === S.activeConv) renderSessionStats();
+    return;
+  }
+  const view = S.views.get(id);
+  const t = view?.turn;
   if (!t) return;
+  const active = id === S.activeConv;
 
   switch (event.type) {
     case "thinking_delta": {
@@ -460,8 +502,11 @@ function onAgentEvent({ id, event }) {
     case "ask": {
       leaveThinking(t);
       endTextSeg(t);
-      S.askPending = true;
-      $("input").placeholder = "输入自由回答，或点击上方选项…";
+      view.askPending = true;
+      if (active) {
+        S.askPending = true;
+        $("input").placeholder = "输入自由回答，或点击上方选项…";
+      }
       const d = el(`<div class="ask-block"><div class="ask-q">${esc(event.question)}</div></div>`);
       for (const o of event.options) {
         const opt = el(`<div class="ask-opt"><b>${esc(o.label)}</b><span>${esc(o.description)}</span></div>`);
@@ -491,36 +536,39 @@ function onAgentEvent({ id, event }) {
       break;
     }
     case "cleared": {
-      $("chat-list").innerHTML = "";
-      finishTurn(null, true);
+      view.root.innerHTML = "";
+      finishTurn(id, null, true);
       return;
-    }
-    case "stats": {
-      S.statsByConv[id] = event.stats;
-      if (id === S.activeConv) renderSessionStats();
-      break;
     }
     case "turn_end": {
-      finishTurn(event.reason);
+      finishTurn(id, event.reason);
       return;
     }
   }
-  if (S.askPending && event.type !== "ask") {
+  if (view.askPending && event.type !== "ask") {
     // 回答已被消费（工具返回后继续），恢复输入语义
-    S.askPending = false;
-    $("input").placeholder = "随心输入";
-    if (S.turn?.askEl) {
-      S.turn.askEl.el.classList.add("answered");
-      S.turn.blocks.push({ kind: "ask", question: S.turn.askEl.question, answer: "已作答" });
-      S.turn.askEl = null;
+    view.askPending = false;
+    if (active) {
+      S.askPending = false;
+      $("input").placeholder = "随心输入";
+    }
+    if (t.askEl) {
+      t.askEl.el.classList.add("answered");
+      t.blocks.push({ kind: "ask", question: t.askEl.question, answer: "已作答" });
+      t.askEl = null;
     }
   }
-  scrollBottom();
+  if (active) scrollBottom();
 }
 
-function finishTurn(reason, skipPersist = false) {
-  const t = S.turn;
-  if (!t) { setRunning(false); return; }
+function finishTurn(convId, reason, skipPersist = false) {
+  const view = S.views.get(convId);
+  const t = view?.turn;
+  const active = convId === S.activeConv;
+  if (!t) {
+    if (active) setRunning(false);
+    return;
+  }
   clearInterval(t.timer);
   leaveThinking(t);
   endTextSeg(t);
@@ -540,15 +588,22 @@ function finishTurn(reason, skipPersist = false) {
     row.children[0].onclick = () => navigator.clipboard.writeText(last.text);
     t.container.appendChild(row);
   }
-  // 持久化本回合块
-  if (!skipPersist && S.activeConv) {
-    for (const b of t.blocks) api.appendBlock(S.activeConv, b);
+  // 持久化本回合块：必须写回事件所属会话（后台回合结束时激活的可能已是另一个）
+  if (!skipPersist) {
+    for (const b of t.blocks) api.appendBlock(convId, b);
   }
-  S.turn = null;
-  S.askPending = false;
-  $("input").placeholder = "随心输入";
-  setRunning(false);
-  scrollBottom();
+  view.turn = null;
+  view.running = false;
+  view.askPending = false;
+  if (active) {
+    S.askPending = false;
+    $("input").placeholder = "随心输入";
+    setRunning(false);
+    scrollBottom();
+  } else {
+    // 后台回合结束：内容已全部落盘，丢弃视图，下次打开按块重建（省内存）
+    S.views.delete(convId);
+  }
 }
 
 function toolSummary(name, input) {
