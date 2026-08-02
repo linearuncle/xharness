@@ -144,7 +144,9 @@ async function runRepl(): Promise<void> {
           `已压缩会话历史：估算 token ${result.beforeTokens} → ${result.afterTokens}。\n`
         );
       } else {
-        process.stdout.write(`${result.warning ?? "未执行压缩。"}\n`);
+        process.stdout.write(
+          `${result.warning ?? result.notice ?? "未执行压缩。"}\n`
+        );
       }
     }
     return "handled";
@@ -159,6 +161,8 @@ async function runRepl(): Promise<void> {
         );
       } else if (compact.warning) {
         process.stdout.write(`[警告] ${compact.warning}\n`);
+      } else if (compact.notice) {
+        process.stdout.write(`[${compact.notice}]\n`);
       }
       await runTurn({
         userInput: input,

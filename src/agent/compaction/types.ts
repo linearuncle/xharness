@@ -18,6 +18,8 @@ export interface CompactDeps {
 export interface CompactResult {
   compacted: boolean;
   warning?: string;
+  /** 信息级提示（非失败）：策略做了不改动历史的后台工作时告知用户（如检查点更新） */
+  notice?: string;
   beforeTokens: number;
   afterTokens: number;
 }

@@ -403,7 +403,7 @@ export async function send(convId, projectDir, text, savedBlocks, emit, attachme
             type: "notice",
             text: r.compacted
               ? `已压缩：估算 token ${r.beforeTokens} → ${r.afterTokens}`
-              : (r.warning ?? "会话历史太短，无需压缩"),
+              : (r.warning ?? r.notice ?? "会话历史太短，无需压缩"),
           });
         } else if (d.command === "clear") {
           s.history = new History();
@@ -474,6 +474,8 @@ export async function send(convId, projectDir, text, savedBlocks, emit, attachme
       });
     } else if (r.warning) {
       emit({ type: "notice", text: `[压缩警告] ${r.warning}` });
+    } else if (r.notice) {
+      emit({ type: "notice", text: r.notice });
     }
     pushAttachments(s.history, attachments);
     // 每回合重新装载插件：设置页的增删改/启停即时生效，无需重启会话

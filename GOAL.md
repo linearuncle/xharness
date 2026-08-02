@@ -152,6 +152,21 @@ xharness/
       未移植：two-pass 预触发、自动压缩 sticky 抑制、AGENTS.md/user_info 重注入
       （system prompt 在 history 外每回合重建）、TODO/后台任务 system-reminder
       （TodoWrite 在 history 外存活）。
+    - `mimo`（2026-08-02 新增，移植自 MiMo-Code v0.1.9
+      `packages/opencode/src/session/` 的 checkpoint.ts/prune.ts/overflow.ts 体系，
+      即其"无限上下文"机制）：**检查点 + 本地重建**——用量每跨一档阈值（窗口 ≤200K
+      每 20%，≤500K 每 10%，>500K 每 5%，各档 ≤ usable 上限）就把 watermark 之后的
+      增量用 LLM 并入九节结构化检查点（活跃意图逐字引用/下一步/会话指令/当前工作/
+      文件/发现/报错修复/设计决策/开放笔记，各节 token 预算），**历史不改动**（经
+      `CompactResult.notice` 告知，非 warning）；真正溢出（≥ usable = 窗口 - 压缩
+      预留 20K - 输出预留 20K）时**零 LLM 调用**本地即时重建：`[检查点转储载体
+      （含最近用户输入原文 FIFO 16K/单条 2K 截头留尾 + 续接指令）, 尾窗]`，尾窗
+      10K~20K token、至少 5 条含文本消息、从最后一条 assistant 前一条起、配对安全
+      向旧侧扩；检查点更新前先 **prune**：最近 2 个用户回合外、累计 40K 保护之外的
+      旧工具输出就地置为占位符（可释放 ≥20K 才执行，不动配对结构）。适配：writer
+      从并行子代理改为回合前同步调用；检查点存会话内存态（WeakMap<History,State>）
+      而非磁盘文件。未移植：任务树/活跃 actor/全局记忆/会话笔记节、writer 失败熔断、
+      fork 缓存对齐、无检查点回退 opencode 摘要（本策略溢出时必产出检查点后重建）。
   - 验收：构造超长历史，自动压缩后会话能继续且模型不重复提问已答问题。
 
 ### 4.2 内置工具（核心 8 个 + Skill 元工具 1 个，`src/tools/`）

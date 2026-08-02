@@ -1,5 +1,6 @@
 import { classicStrategy } from "./classic.js";
 import { grokStrategy } from "./grok.js";
+import { mimoStrategy } from "./mimo.js";
 import { piStrategy } from "./pi.js";
 import type { CompactionStrategy } from "./types.js";
 
@@ -8,6 +9,7 @@ const STRATEGIES: readonly CompactionStrategy[] = [
   classicStrategy,
   piStrategy,
   grokStrategy,
+  mimoStrategy,
 ];
 
 export const DEFAULT_COMPACTION_STRATEGY_ID = classicStrategy.id;
