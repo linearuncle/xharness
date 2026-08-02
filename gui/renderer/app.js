@@ -61,7 +61,9 @@ function renderSidebar() {
   wrap.innerHTML = "";
   for (const p of sb.projects) {
     const row = document.createElement("div");
-    row.className = "sb-project" + (p.dir === S.activeProject ? " active" : "");
+    // 有当前对话时只高亮对话行；无对话（项目空态）才高亮项目
+    const projectOn = p.dir === S.activeProject && !S.activeConv;
+    row.className = "sb-project" + (projectOn ? " active" : "");
     row.innerHTML = `<span class="ic">🗂</span><span>${esc(p.name)}</span>`;
     row.onclick = () => selectProject(p.dir);
     wrap.appendChild(row);
