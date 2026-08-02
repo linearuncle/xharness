@@ -1,11 +1,13 @@
-import { app, BrowserWindow, ipcMain, dialog, nativeImage, protocol } from "electron";
+import { app, BrowserWindow, ipcMain, dialog, nativeImage, protocol, shell } from "electron";
 import {
   readFileSync, writeFileSync, mkdirSync, copyFileSync, existsSync,
 } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, basename, resolve } from "node:path";
 import { userInfo } from "node:os";
-import { marked } from "marked";
+import { Marked } from "marked";
+import { markedHighlight } from "marked-highlight";
+import hljs from "highlight.js";
 import * as store from "./store.js";
 import * as engine from "./engine.js";
 
@@ -25,6 +27,22 @@ process.env.PATH = [
   process.env.PATH ?? "",
 ].filter(Boolean).join(":");
 
+// 代码块经 highlight.js 上色；未知语言走自动检测（始终返回已转义 HTML，之后仍过 DOMPurify）
+const marked = new Marked(
+  markedHighlight({
+    langPrefix: "hljs language-",
+    highlight(code, lang) {
+      try {
+        if (lang && hljs.getLanguage(lang)) {
+          return hljs.highlight(code, { language: lang }).value;
+        }
+        return hljs.highlightAuto(code).value;
+      } catch {
+        return ""; // 空串让 marked 走默认转义
+      }
+    },
+  })
+);
 marked.setOptions({ breaks: true });
 
 function escapeHtml(s) {
@@ -68,6 +86,19 @@ function createWindow() {
     },
   });
   win.loadFile(join(here, "renderer", "index.html"));
+
+  // markdown 里的链接：拦截窗口内导航/新窗口，改交系统浏览器（仅 http/https）
+  const openExternal = (url) => {
+    if (/^https?:\/\//.test(url)) shell.openExternal(url);
+  };
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    openExternal(url);
+    return { action: "deny" };
+  });
+  win.webContents.on("will-navigate", (e, url) => {
+    e.preventDefault();
+    openExternal(url);
+  });
 }
 
 app.whenReady().then(() => {

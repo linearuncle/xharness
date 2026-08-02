@@ -150,20 +150,69 @@ body {
   color: var(--text-2); font-size: 13px; margin: 22px 0 14px;
   border-bottom: 1px solid var(--border); padding-bottom: 10px;
 }
-.assistant { line-height: 1.75; font-size: 14.5px; }
+/* ---- 助手消息 markdown 排版 ---- */
+.assistant { line-height: 1.75; font-size: 14.5px; color: #24292f; }
+.assistant > :first-child, .assistant .stream-text > :first-child { margin-top: 0; }
+.assistant > :last-child, .assistant .stream-text > :last-child { margin-bottom: 0; }
 .assistant p { margin: 10px 0; }
-.assistant ul, .assistant ol { margin: 10px 0; padding-left: 22px; }
+
+/* 标题：层级分明 */
+.assistant h1 { font-size: 19px; font-weight: 700; margin: 22px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.assistant h2 { font-size: 17px; font-weight: 700; margin: 20px 0 8px; }
+.assistant h3 { font-size: 15.5px; font-weight: 650; margin: 16px 0 6px; }
+.assistant h4, .assistant h5, .assistant h6 { font-size: 14.5px; font-weight: 650; margin: 14px 0 6px; }
+
+/* 列表：含嵌套与任务列表 */
+.assistant ul, .assistant ol { margin: 8px 0; padding-left: 24px; }
 .assistant li { margin: 4px 0; }
-.assistant h1, .assistant h2, .assistant h3 { margin: 16px 0 8px; font-size: 15.5px; }
+.assistant li > p { margin: 4px 0; }
+.assistant li ul, .assistant li ol { margin: 4px 0; }
+.assistant ul { list-style: disc; }
+.assistant ul ul { list-style: circle; }
+.assistant input[type="checkbox"] { margin-right: 6px; vertical-align: middle; }
+
+/* 行内代码 */
 .assistant code {
-  background: #f1f1ef; border-radius: 5px; padding: 1px 6px;
-  font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 12.5px;
+  background: #f0f0ee; border-radius: 5px; padding: 2px 6px;
+  font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  font-size: 12.5px; color: #1f2328;
 }
+
+/* 代码块（highlight.js 上色，主题见 vendor/hljs-github.min.css） */
 .assistant pre {
-  background: #f7f7f5; border: 1px solid var(--border); border-radius: 10px;
-  padding: 12px 14px; overflow-x: auto; margin: 10px 0;
+  background: #f8f8f7; border: 1px solid var(--border); border-radius: 10px;
+  padding: 13px 16px; overflow-x: auto; margin: 12px 0; line-height: 1.6;
 }
-.assistant pre code { background: none; padding: 0; }
+.assistant pre code {
+  background: none; padding: 0; font-size: 12.5px; color: inherit;
+  white-space: pre; display: block;
+}
+
+/* 表格 */
+.assistant table {
+  border-collapse: collapse; margin: 12px 0; font-size: 13.5px;
+  display: block; width: max-content; max-width: 100%; overflow-x: auto;
+}
+.assistant th, .assistant td {
+  border: 1px solid var(--border); padding: 7px 14px; text-align: left; line-height: 1.55;
+}
+.assistant th { background: #f7f7f5; font-weight: 650; }
+.assistant tr:nth-child(even) td { background: #fbfbfa; }
+
+/* 引用块 */
+.assistant blockquote {
+  margin: 12px 0; padding: 2px 0 2px 14px;
+  border-left: 3px solid #d9d9d6; color: var(--text-2);
+}
+.assistant blockquote p { margin: 6px 0; }
+
+/* 链接 / 分隔线 / 图片 / 强调 */
+.assistant a { color: #0969da; text-decoration: none; }
+.assistant a:hover { text-decoration: underline; }
+.assistant hr { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
+.assistant img { max-width: 100%; border-radius: 10px; }
+.assistant strong { font-weight: 650; }
+
 .assistant .stream-text { white-space: pre-wrap; }
 .assistant .stream-text.rendered { white-space: normal; }
 
