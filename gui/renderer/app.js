@@ -136,7 +136,7 @@ async function refreshContext(dir) {
   $("ctx-branch").textContent = ctx.branch ?? "—";
   $("ctx-branch-chip").style.display = ctx.branch ? "" : "none";
   $("env-branch").textContent = `⎇ ${ctx.branch ?? "—"}`;
-  $("env-changes").textContent = `🗇 变更（${ctx.changes.length}）`;
+  $("env-changes").innerHTML = `<span class="ic">◈</span>变更（${ctx.changes.length}）`;
   $("env-changes-list").textContent = ctx.changes.slice(0, 20).join("\n");
 }
 
