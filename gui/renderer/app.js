@@ -900,7 +900,6 @@ async function boot() {
   renderSidebar();
   bindSettings();
   bindPlusMenu();
-  maybeShowYoloModal(st.yoloAcked);
 
   // 全局快捷键：Cmd+N 新对话 / Cmd+O 添加项目
   window.addEventListener("keydown", (e) => {
@@ -1833,16 +1832,3 @@ function renderAttachChips() {
   }
 }
 
-/* ---------------- 首启 YOLO 风险确认 ---------------- */
-function maybeShowYoloModal(acked) {
-  if (acked) return;
-  const modal = $("yolo-modal");
-  modal.classList.remove("hidden");
-  const agree = $("ym-agree");
-  const start = $("ym-start");
-  agree.onchange = () => (start.disabled = !agree.checked);
-  start.onclick = async () => {
-    await api.yoloAck();
-    modal.classList.add("hidden");
-  };
-}

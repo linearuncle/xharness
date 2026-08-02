@@ -21,7 +21,6 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ATT_DIR = join(store.DATA_DIR, "attachments");
-const ACK_FILE = join(store.DATA_DIR, "yolo-ack");
 let win = null;
 
 app.setName("xharness");
@@ -213,7 +212,6 @@ ipcMain.handle("state:get", () => ({
   sidebar: store.sidebarData(),
   providers: store.getProvidersSafe(),
   efforts: engine.EFFORTS,
-  yoloAcked: existsSync(ACK_FILE),
   appearance: store.getAppearance(),
   general: store.getGeneral(),
   compactionStrategies: engine.listCompactionStrategies(),
@@ -265,12 +263,6 @@ ipcMain.handle("appearance:vibrancy", (_e, enabled) => {
   } catch {
     return false;
   }
-});
-
-ipcMain.handle("yolo:ack", () => {
-  mkdirSync(dirname(ACK_FILE), { recursive: true });
-  writeFileSync(ACK_FILE, String(Date.now()));
-  return true;
 });
 
 ipcMain.handle("settings:get", () => ({

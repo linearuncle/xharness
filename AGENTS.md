@@ -125,7 +125,7 @@ hook 脚本必须零依赖 Node（打包版靠 `ELECTRON_RUN_AS_NODE=1` 跑 `${N
 ## 项目约定
 
 - **YOLO 是产品定位**：无确认、无沙箱、无命令黑名单，不要"顺手"加运行时过滤；
-  披露靠 README/SECURITY.md/首启确认弹窗。
+  披露靠 README/SECURITY.md。
 - **早期零迁移**：数据结构/路径变更一律当全新项目处理，不写迁移与兼容代码。
 - E2E 约定（test/e2e/）：DeepSeek + `deepseek-v4-flash`、mkdtemp 沙箱、提示词禁破坏性
   命令且有 `assertNoDestructiveCommands` 审计、断言产物/退出码优先 + 工具子序列
