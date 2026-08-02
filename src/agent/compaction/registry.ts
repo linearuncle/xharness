@@ -1,9 +1,14 @@
 import { classicStrategy } from "./classic.js";
+import { grokStrategy } from "./grok.js";
 import { piStrategy } from "./pi.js";
 import type { CompactionStrategy } from "./types.js";
 
 /** 全部策略：新增算法在此追加注册即可，禁止在调用方按策略 id 写特殊分支 */
-const STRATEGIES: readonly CompactionStrategy[] = [classicStrategy, piStrategy];
+const STRATEGIES: readonly CompactionStrategy[] = [
+  classicStrategy,
+  piStrategy,
+  grokStrategy,
+];
 
 export const DEFAULT_COMPACTION_STRATEGY_ID = classicStrategy.id;
 

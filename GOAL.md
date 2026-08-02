@@ -136,6 +136,22 @@ xharness/
       总结；从 Read/Write/Edit 工具调用累积读/改文件清单（`<read-files>`/
       `<modified-files>` 标签，跨多次压缩累积）；切点落在回合中间时对回合前缀单独摘要后
       合并（split turn）。未移植：分支摘要（无会话分支）、settings 外部配置（常量即默认）。
+    - `grok`（2026-08-02 新增，移植自 xAI grok-build
+      `crates/common/xai-grok-compaction` code_compaction 子系统 + `xai-grok-shell`
+      宿主接线）：**全量替换（full-replace）**——不留尾部窗口，模型在自身上下文里对
+      整个会话做九段式结构化"自我总结"（主要请求/技术概念/文件代码/报错修复/问题排查/
+      全部用户消息/待办/当前工作/下一步；对话原样作为上下文，提示词追加为最后一条 user
+      消息，区别于 pi 的序列化文本），然后从零重建历史
+      `[<user_query> 最后真实用户请求, 尾部占位消息, 摘要载体]`（尾部 = 最后真实用户
+      回合之后的 assistant 消息原样 + tool_result 以 "Tool call omitted..." 占位，
+      配对不变量不破）；总结请求自身溢出时按 **verbatim → fitted → lossy** 输入阶梯
+      降级（fitted 预算 = 窗口 - 32768 掐头保尾不拆配对；lossy 工具块打平成文本后适配
+      70% 窗口，溢出按报错文本匹配识别）；清洗后 <500 字符的**退化摘要**按瞬态失败重试
+      （总尝试 3 次）；摘要清洗剥 `<analysis>` 草稿、抽 `<summary>` 块、对回显控制
+      token 注入零宽空格消毒；真实用户回合识别跳过摘要载体/中断标记；85% 窗口自动触发。
+      未移植：two-pass 预触发、自动压缩 sticky 抑制、AGENTS.md/user_info 重注入
+      （system prompt 在 history 外每回合重建）、TODO/后台任务 system-reminder
+      （TodoWrite 在 history 外存活）。
   - 验收：构造超长历史，自动压缩后会话能继续且模型不重复提问已答问题。
 
 ### 4.2 内置工具（核心 8 个 + Skill 元工具 1 个，`src/tools/`）
