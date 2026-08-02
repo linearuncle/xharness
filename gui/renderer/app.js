@@ -881,7 +881,8 @@ function renderProviderDetail() {
   const urlInput = field("Base URL", `<input type="text" placeholder="https://api.example.com/anthropic" value="${esc(work.baseUrl)}" />`);
   urlInput.oninput = () => (work.baseUrl = urlInput.value.trim());
 
-  field("API 格式", `<select disabled><option>Anthropic Messages (/v1/messages)</option></select>`);
+  box.appendChild(el(`<label>API 格式</label>`));
+  box.appendChild(el(`<div class="pd-static">Anthropic Messages <span class="pd-static-dim">/v1/messages</span></div>`));
 
   // API Key：仅手动填写
   box.appendChild(el(`<label>API Key</label>`));

@@ -325,11 +325,17 @@ body {
 .pd-badge.err { background: #fee2e2; color: #b91c1c; border-color: #fecaca; }
 .pd-del { margin-left: auto; }
 #prov-detail label { display: block; font-size: 13px; color: var(--text-2); margin: 14px 0 6px; }
-#prov-detail input[type="text"], #prov-detail input[type="password"], #prov-detail select {
+#prov-detail input[type="text"], #prov-detail input[type="password"] {
   width: 100%; padding: 9px 12px; border: 1px solid var(--card-border);
   border-radius: 9px; font: inherit; font-size: 13.5px; outline: none; background: #fff;
 }
 #prov-detail input:focus { border-color: #b9b9b6; }
+/* 固定只读字段：不用 disabled select，避免假下拉箭头 */
+.pd-static {
+  font-size: 13.5px; color: var(--text-2); padding: 2px 0 4px;
+  line-height: 1.4;
+}
+.pd-static-dim { color: var(--text-3); font-size: 12.5px; margin-left: 4px; }
 .key-row { display: flex; gap: 8px; align-items: center; }
 .key-row input { flex: 1; }
 .env-hint { font-size: 12.5px; color: var(--text-3); margin-top: 6px; }
