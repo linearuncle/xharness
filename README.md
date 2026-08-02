@@ -77,7 +77,7 @@ Messages**（`/v1/messages`）与 **OpenAI Responses**（`/v1/responses`）。An
 | **DeepSeek**（内置） | `https://api.deepseek.com/anthropic` | `deepseek-v4-flash`（默认）、`deepseek-v4-pro` | 便宜量大，flash 日常够用，pro 更强 |
 | Kimi | `https://api.kimi.com/coding` | `k3` | 1M 上下文、支持看图 |
 | Anthropic 官方 | `https://api.anthropic.com` | claude 系列 | |
-| **Grok**（内置，xAI） | `https://api.x.ai` | `grok-4.3`、`grok-4.5` | SuperGrok / X Premium 订阅账号设备码登录，无需 API Key；grok 只支持 OpenAI Responses 格式，已默认选好 |
+| **Grok**（内置，xAI） | `https://api.x.ai` | `grok-4.3`、`grok-4.5` | SuperGrok / X Premium 订阅账号设备码登录，无需 API Key；grok 只支持 OpenAI Responses 格式，已默认选好。使用与排错见 [docs/grok-subscription.md](docs/grok-subscription.md) |
 
 设置 → 添加供应商，填名称 / Base URL / API Key，再添加模型 ID 与上下文窗口即可。
 所有已启用供应商的模型都会出现在聊天窗口的模型菜单里，随时切换。
