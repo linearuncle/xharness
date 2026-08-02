@@ -19,6 +19,9 @@ contextBridge.exposeInMainWorld("api", {
   getPluginManifest: (root) => ipcRenderer.invoke("plugins:manifest-get", root),
   savePluginManifest: (root, text) =>
     ipcRenderer.invoke("plugins:manifest-save", { root, text }),
+  getAppearance: () => ipcRenderer.invoke("appearance:get"),
+  setAppearance: (a) => ipcRenderer.invoke("appearance:set", a),
+  setVibrancy: (enabled) => ipcRenderer.invoke("appearance:vibrancy", enabled),
   getProviderKey: (id) => ipcRenderer.invoke("settings:getProviderKey", id),
   upsertProvider: (provider) => ipcRenderer.invoke("settings:upsert", provider),
   deleteProvider: (id) => ipcRenderer.invoke("settings:delete", id),

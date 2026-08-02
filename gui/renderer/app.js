@@ -15,6 +15,7 @@ const S = {
   plugins: [], // 设置-插件页列表（主进程纯数据视图）
   activePluginRoot: null,
   attachments: [], // [{path,name,isImage}]
+  appearance: null, // 外观设置（boot 时载入，theme.js 应用）
 };
 
 const DEFAULT_MODEL_ID = "deepseek-v4-flash";
@@ -90,12 +91,12 @@ function showConvMenu(e, c) {
   document.querySelector(".ctx-menu")?.remove();
   const m = document.createElement("div");
   m.className = "ctx-menu";
-  m.style.cssText = `position:fixed;left:${e.clientX}px;top:${e.clientY}px;z-index:99;background:#fff;border:1px solid var(--card-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:4px;font-size:13px;`;
+  m.style.cssText = `position:fixed;left:${e.clientX}px;top:${e.clientY}px;z-index:99;background:var(--panel);border:1px solid var(--card-border);border-radius:10px;box-shadow:0 8px 24px var(--shadow);padding:4px;font-size:13px;`;
   const mk = (label, fn) => {
     const it = document.createElement("div");
     it.textContent = label;
     it.style.cssText = "padding:7px 14px;border-radius:7px;cursor:pointer;";
-    it.onmouseenter = () => (it.style.background = "#f4f4f2");
+    it.onmouseenter = () => (it.style.background = "var(--hover)");
     it.onmouseleave = () => (it.style.background = "");
     it.onclick = async () => { m.remove(); await fn(); };
     m.appendChild(it);
@@ -740,6 +741,11 @@ async function boot() {
   S.efforts = st.efforts;
   S.sidebar = st.sidebar;
   S.meta = { ...defaultChoice() };
+  // 外观：启动即应用，之后跟随系统深浅变化
+  S.appearance = st.appearance;
+  Appearance.init(S.appearance, (a) => (S.appearance = a));
+  Theme.apply(S.appearance);
+  Theme.watchSystem(() => S.appearance);
   $("username").textContent = "xharness";
   $("avatar").textContent = "x";
   updateModelLabel();
@@ -839,9 +845,22 @@ boot();
 
 /* ---------------- 设置界面 ---------------- */
 
+function switchSettingsPage(page) {
+  $("set-nav-models").classList.toggle("active", page === "models");
+  $("set-nav-appearance").classList.toggle("active", page === "appearance");
+  $("set-nav-plugins").classList.toggle("active", page === "plugins");
+  $("set-page-models").classList.toggle("hidden", page !== "models");
+  $("set-page-appearance").classList.toggle("hidden", page !== "appearance");
+  $("set-page-plugins").classList.toggle("hidden", page !== "plugins");
+  if (page === "appearance") Appearance.render();
+  if (page === "plugins") refreshPlugins();
+}
+
 function bindSettings() {
   $("btn-settings").onclick = openSettings;
   $("btn-settings-back").onclick = closeSettings;
+  $("set-nav-models").onclick = () => switchSettingsPage("models");
+  $("set-nav-appearance").onclick = () => switchSettingsPage("appearance");
   $("btn-add-provider").onclick = () => {
     const id = `p${Date.now().toString(36)}`;
     S.settings.draft = {
@@ -854,20 +873,11 @@ function bindSettings() {
   };
   $("md-close").onclick = closeModelDialog;
   $("md-cancel").onclick = closeModelDialog;
-  $("set-nav-models").onclick = () => switchSetPage("models");
-  $("set-nav-plugins").onclick = () => switchSetPage("plugins");
+  $("set-nav-plugins").onclick = () => switchSettingsPage("plugins");
   $("btn-add-plugin-github").onclick = openPluginDialog;
   $("btn-add-plugin-local").onclick = installPluginLocal;
   $("pg-close").onclick = closePluginDialog;
   $("pg-cancel").onclick = closePluginDialog;
-}
-
-function switchSetPage(page) {
-  $("set-nav-models").classList.toggle("active", page === "models");
-  $("set-nav-plugins").classList.toggle("active", page === "plugins");
-  $("set-page-models").classList.toggle("hidden", page !== "models");
-  $("set-page-plugins").classList.toggle("hidden", page !== "plugins");
-  if (page === "plugins") refreshPlugins();
 }
 
 function openSettings() {
@@ -875,7 +885,7 @@ function openSettings() {
   S.settings.draft = null;
   document.body.classList.add("settings-open");
   $("settings-view").classList.remove("hidden");
-  switchSetPage("models");
+  switchSettingsPage("models");
   renderProviderList();
   renderProviderDetail();
 }
