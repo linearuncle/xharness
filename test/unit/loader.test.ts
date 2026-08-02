@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { loadSkills } from "../../src/skills/loader.js";
+import { loadSkills, scanSkillsDir } from "../../src/skills/loader.js";
 
 let root: string;
 let globalDir: string;
@@ -119,5 +119,22 @@ describe("loadSkills", () => {
     const skills = load();
     expect(skills).toEqual([]);
     expect(warnings).toEqual([]);
+  });
+});
+
+describe("scanSkillsDir", () => {
+  it("返回技能（含 file 路径）与警告，不做同名合并", () => {
+    writeSkill(globalDir, "good", "---\ndescription: 正常技能\n---\n正常体");
+    writeSkill(globalDir, "nodesc", "---\nname: nodesc\n---\n正文");
+    const r = scanSkillsDir(globalDir);
+    expect(r.skills).toHaveLength(1);
+    expect(r.skills[0].name).toBe("good");
+    expect(r.skills[0].file).toBe(join(globalDir, "good", "SKILL.md"));
+    expect(r.warnings).toHaveLength(1);
+    expect(r.warnings[0]).toContain("description");
+  });
+
+  it("目录不存在时返回空结果", () => {
+    expect(scanSkillsDir(join(root, "missing"))).toEqual({ skills: [], warnings: [] });
   });
 });

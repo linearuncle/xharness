@@ -122,6 +122,12 @@ function resolveKey(provider) {
 
 const sessions = new Map();
 
+// 设置页禁用的技能不进会话（仅影响 GUI 装载，不改技能文件；对新会话生效）
+function enabledSkills(projectDir) {
+  const disabled = new Set(store.getGeneral().disabledSkills ?? []);
+  return loadSkills({ cwd: projectDir }).filter((s) => !disabled.has(s.name));
+}
+
 function seedHistory(history, blocks) {
   for (const b of blocks) {
     if (b.kind === "user") {
@@ -139,7 +145,7 @@ export function getSession(convId, projectDir, savedBlocks) {
   let s = sessions.get(convId);
   if (s) return s;
 
-  const skills = loadSkills({ cwd: projectDir });
+  const skills = enabledSkills(projectDir);
   const registry = createDefaultRegistry();
   const todoStore = { todos: [] };
   const choice = defaultChoice();
@@ -309,7 +315,7 @@ export function sessionMeta(convId) {
 }
 
 export function listSkills(projectDir) {
-  return loadSkills({ cwd: projectDir }).map(({ name, description }) => ({
+  return enabledSkills(projectDir).map(({ name, description }) => ({
     name,
     description,
   }));

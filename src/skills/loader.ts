@@ -7,6 +7,8 @@ export interface Skill {
   name: string;
   description: string;
   body: string;
+  /** SKILL.md 绝对路径（GUI 设置页展示/打开用；运行时逻辑不依赖） */
+  file?: string;
 }
 
 export interface LoadSkillsOptions {
@@ -70,7 +72,24 @@ function parseSkillFile(
     name,
     description: rawDescription.trim(),
     body: parsed.content.trim(),
+    file,
   };
+}
+
+export interface SkillsScan {
+  skills: Skill[];
+  warnings: string[];
+}
+
+/** 扫描单个技能目录，返回全部有效技能与加载警告（GUI 设置页用，不做同名合并） */
+export function scanSkillsDir(root: string): SkillsScan {
+  const warnings: string[] = [];
+  const skills: Skill[] = [];
+  for (const dirName of listSkillDirs(root)) {
+    const skill = parseSkillFile(root, dirName, (m) => warnings.push(m));
+    if (skill) skills.push(skill);
+  }
+  return { skills, warnings };
 }
 
 /**

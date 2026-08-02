@@ -1,16 +1,17 @@
 import { app, BrowserWindow, ipcMain, dialog, nativeImage, nativeTheme, protocol, shell } from "electron";
 import {
-  readFileSync, writeFileSync, mkdirSync, copyFileSync, existsSync,
+  readFileSync, writeFileSync, mkdirSync, copyFileSync, existsSync, rmSync,
 } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, basename, resolve } from "node:path";
-import { userInfo } from "node:os";
+import { userInfo, homedir } from "node:os";
 import { Marked } from "marked";
 import { markedHighlight } from "marked-highlight";
 import hljs from "highlight.js";
 import * as store from "./store.js";
 import * as engine from "./engine.js";
 import { loadPlugins } from "../dist/plugins/loader.js";
+import { scanSkillsDir } from "../dist/skills/loader.js";
 import {
   installFromGitHub, installFromLocalDir, removePlugin,
   setPluginEnabled, readManifest, writeManifest,
@@ -205,6 +206,9 @@ ipcMain.handle("general:set", (_e, patch) => {
   if (typeof patch?.showSessionStats === "boolean") {
     clean.showSessionStats = patch.showSessionStats;
   }
+  if (Array.isArray(patch?.disabledSkills)) {
+    clean.disabledSkills = patch.disabledSkills.filter((x) => typeof x === "string");
+  }
   store.setGeneral(clean);
   return store.getGeneral();
 });
@@ -336,6 +340,94 @@ ipcMain.handle("plugins:manifest-save", (_e, { root, text }) => {
   } catch (err) {
     return { ok: false, error: err.message };
   }
+});
+
+// ---------- 技能管理（设置页：全局 ~/.agents/skills + 各项目 .agents/skills） ----------
+
+const GLOBAL_SKILLS_DIR = join(homedir(), ".agents", "skills");
+
+// 技能目录白名单：全局目录 + 已添加项目的 .agents/skills（IPC 信任边界）
+function skillRoots() {
+  return [
+    GLOBAL_SKILLS_DIR,
+    ...store.sidebarData().projects.map((p) => join(p.dir, ".agents", "skills")),
+  ];
+}
+
+// file 必须是白名单根目录直接子目录下的 SKILL.md，返回技能目录；不合法返回 null
+function resolveSkillDir(file) {
+  if (typeof file !== "string" || basename(file) !== "SKILL.md") return null;
+  const dir = dirname(resolve(file));
+  for (const root of skillRoots()) {
+    if (join(root, basename(dir)) === dir) return dir;
+  }
+  return null;
+}
+
+// 渲染层的技能设置视图：全局 + 各项目分组、汇总警告、禁用名单
+function skillsSettingsView() {
+  const g = scanSkillsDir(GLOBAL_SKILLS_DIR);
+  const warnings = [...g.warnings];
+  const projects = [];
+  for (const p of store.sidebarData().projects) {
+    const s = scanSkillsDir(join(p.dir, ".agents", "skills"));
+    warnings.push(...s.warnings);
+    if (s.skills.length) projects.push({ dir: p.dir, name: p.name, skills: s.skills });
+  }
+  return {
+    global: g.skills,
+    projects,
+    warnings,
+    disabled: store.getGeneral().disabledSkills ?? [],
+    globalDir: GLOBAL_SKILLS_DIR,
+  };
+}
+
+ipcMain.handle("skillsSettings:list", () => skillsSettingsView());
+
+ipcMain.handle("skillsSettings:setEnabled", (_e, { name, enabled }) => {
+  if (typeof name !== "string" || !name) return skillsSettingsView();
+  const cur = new Set(store.getGeneral().disabledSkills ?? []);
+  if (enabled) cur.delete(name);
+  else cur.add(name);
+  store.setGeneral({ disabledSkills: [...cur] });
+  return skillsSettingsView();
+});
+
+ipcMain.handle("skillsSettings:create", (_e, name) => {
+  const n = String(name ?? "").trim();
+  if (!/^[a-z0-9][a-z0-9._-]*$/i.test(n)) {
+    return { ok: false, error: "技能名只能包含字母、数字、点、下划线和连字符" };
+  }
+  const dir = join(GLOBAL_SKILLS_DIR, n);
+  if (existsSync(dir)) return { ok: false, error: `技能 ${n} 已存在` };
+  try {
+    mkdirSync(dir, { recursive: true });
+    const file = join(dir, "SKILL.md");
+    writeFileSync(file, `---\nname: ${n}\ndescription: 一句话描述这个技能什么时候用\n---\n\n在这里写技能的具体指令（模型触发技能后会读取整个正文）。\n`);
+    return { ok: true, file, view: skillsSettingsView() };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle("skillsSettings:remove", (_e, file) => {
+  const dir = resolveSkillDir(file);
+  if (!dir) return { ok: false, error: "非法的技能路径" };
+  try {
+    rmSync(dir, { recursive: true, force: true });
+    return { ok: true, view: skillsSettingsView() };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+// 用系统默认编辑器打开 SKILL.md（路径经白名单校验）
+ipcMain.handle("skillsSettings:open", (_e, file) => {
+  const dir = resolveSkillDir(file);
+  if (!dir || !existsSync(join(dir, "SKILL.md"))) return false;
+  shell.openPath(join(dir, "SKILL.md"));
+  return true;
 });
 
 ipcMain.handle("project:add", async () => {
