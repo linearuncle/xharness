@@ -131,9 +131,10 @@ hook 脚本必须零依赖 Node（打包版靠 `ELECTRON_RUN_AS_NODE=1` 跑 `${N
   命令且有 `assertNoDestructiveCommands` 审计、断言产物/退出码优先 + 工具子序列
   （禁全序列指纹）、retry 1 次、无 key skip。
 - **GUI 验证闭环（强制）**：每个 issue/feature 完成后必须重启开发环境——
-  `npm run build` 后以 `--remote-debugging-port=9223` 重启 GUI，按
-  `docs/cdp-testing.md` 的方案做详细测试（标准冒烟三段 + 针对本次改动追加的断言），
-  全部通过才算完成。
+  `npm run build` 后按 `docs/cdp-testing.md` 重启 GUI 并做详细测试（标准冒烟
+  三段 + 针对本次改动追加的断言），全部通过才算完成。单实例用固定端口 9223；
+  **多 worktree 并发必须用文档 §4 的隔离流程**（`XH_DATA_DIR` + 端口 0 +
+  `--data-dir`），禁止共享 9223、禁止裸 `pkill -f "MacOS/xharness"`。
 - 依赖最小化：运行时仅 `@anthropic-ai/sdk` + `gray-matter`（GUI 另有 marked/dompurify）；
   ripgrep 为硬依赖无 JS 回退；新增依赖需先在 GOAL.md 层面确认。
 - git：每完成一组改动即用中文提交信息 commit；`dist/`、`release/` 不入库。

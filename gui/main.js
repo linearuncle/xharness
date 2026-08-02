@@ -26,6 +26,10 @@ let win = null;
 
 app.setName("xharness");
 
+// 多实例/并发测试隔离：XH_DATA_DIR 同时改写 Chromium userData
+// （DevToolsActivePort 等落点）与 store.js 的 JSONL 数据目录，两者必须同目录
+if (process.env.XH_DATA_DIR) app.setPath("userData", process.env.XH_DATA_DIR);
+
 // Finder 启动的 GUI 不继承 shell PATH：优先用打包内置的 bin（含 rg），
 // 再兜底补上 Homebrew 常见路径，最后才是系统默认 PATH
 process.env.PATH = [
@@ -195,6 +199,15 @@ app.on("window-all-closed", () => app.quit());
 
 // ---------- IPC ----------
 
+// CDP 调试端口：--remote-debugging-port=<n> 原样返回；=0 时 Chromium 自动选空闲端口，
+// 主进程拿不到真实端口（Electron 不落 DevToolsActivePort），以 "auto" 表示。
+// 未开启返回 null（渲染层据此显隐调试标记）
+function resolveDebugPort() {
+  const v = app.commandLine.getSwitchValue("remote-debugging-port");
+  if (!v) return null;
+  return v === "0" ? "auto" : v;
+}
+
 ipcMain.handle("state:get", () => ({
   username: userInfo().username,
   sidebar: store.sidebarData(),
@@ -204,8 +217,8 @@ ipcMain.handle("state:get", () => ({
   appearance: store.getAppearance(),
   general: store.getGeneral(),
   compactionStrategies: engine.listCompactionStrategies(),
-  // CDP 调试端口（--remote-debugging-port=9223 启动时非空），渲染层据此显示调试标记
-  debugPort: app.commandLine.getSwitchValue("remote-debugging-port") || null,
+  // CDP 调试端口（--remote-debugging-port 启动时非空），渲染层据此显示调试标记
+  debugPort: resolveDebugPort(),
 }));
 
 // ---------- 通用设置 ----------

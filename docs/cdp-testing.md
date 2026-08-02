@@ -28,9 +28,9 @@ curl -s http://127.0.0.1:9223/json/version   # 返回 Browser/Protocol-Version �
 curl -s http://127.0.0.1:9223/json/list      # 返回所有可调试目标（page/worker/...）
 ```
 
-界面上也有可视确认：带端口启动时，输入区工具栏会常驻一个 `CDP:9223` 小标记
+界面上也有可视确认：带端口启动时，输入区工具栏会常驻一个红色 `CDP:9223` 标记
 （主进程检测 `--remote-debugging-port` 开关，经 `state:get` 的 `debugPort` 字段
-下发；不带端口启动则为 `null`，标记不显示）。
+下发；不带端口启动则为 `null`，标记不显示；`=0` 自动端口时显示 `CDP:auto`）。
 
 在 Chrome 里打开 `http://127.0.0.1:9223` 也能得到可视化 DevTools 入口。
 
@@ -44,6 +44,7 @@ node scripts/cdp-eval.mjs --list                       # 列出所有 CDP 目标
 node scripts/cdp-eval.mjs 'document.title'             # 求值表达式，JSON 输出
 node scripts/cdp-eval.mjs --file checks/smoke.js       # 求值文件内容（表达式/IIFE）
 node scripts/cdp-eval.mjs --port 9223 --url 'index\.html' '1+1'   # 自定义端口/目标匹配
+node scripts/cdp-eval.mjs --data-dir ../.xhtest '1+1'  # 从启动日志解析自动端口（并发用法，见 §4）
 ```
 
 退出码：`0` 成功；`1` 连接/协议错误；`2` 页面内抛异常——可直接用于断言式检查。
@@ -122,16 +123,62 @@ node scripts/cdp-eval.mjs '(async () => {
 在 3.1–3.3 之外追加针对该功能的断言（选择器从 `gui/renderer/index.html` 取，
 一律用稳定 `id`，不用样式类）。
 
-## 4. 排障
+## 4. 多 worktree 并发（多个 AI agent 同时测试）
+
+§1–§3 的单实例流程在并发下有三个硬冲突（实测）：端口 9223 被先到的实例占用、
+后到者**无 CDP 端点且 curl 会静默连上别人的实例**；`pkill -f "MacOS/xharness"`
+会杀掉所有实例（包括用户自己正在用的）；默认数据目录
+`~/Library/Application Support/xharness/` 被所有实例共享，session/settings 互串。
+
+并发必须走**隔离流程**（无需任何跨 agent 协调，已双实例实测）：
+
+```bash
+# 1) 每实例独立数据目录（XH_DATA_DIR 同时隔离 JSONL 数据与 Chromium userData）
+mkdir -p "$PWD/.xhtest"          # 已 gitignore（.xhtest*/）
+
+# 2) 端口 0 = Chromium 自动选空闲端口；输出重定向到数据目录的 cdp.log
+cd gui && XH_DATA_DIR="$(cd .. && pwd)/.xhtest" \
+  npm start -- --remote-debugging-port=0 > "$(cd .. && pwd)/.xhtest/cdp.log" 2>&1
+
+# 3) 驱动脚本自动从日志解析本实例端口，无需人工抄
+node scripts/cdp-eval.mjs --data-dir ../.xhtest --list
+node scripts/cdp-eval.mjs --data-dir ../.xhtest '<表达式>'   # §3 冒烟原样可用
+```
+
+注意（均为实测结论）：
+
+- 端口发现靠启动日志里的 `DevTools listening on ws://127.0.0.1:<port>/...` 行；
+  Electron **不会**落 `DevToolsActivePort` 文件，所以必须重定向输出。
+- 隔离数据目录是全新首启：`yolo-ack` 不存在，YOLO 风险确认弹窗会挡住 UI，
+  先点掉再做其他检查（顺带当交互测试）：
+  ```bash
+  node scripts/cdp-eval.mjs --data-dir ../.xhtest '(() => {
+    const m = document.querySelector("#yolo-modal");
+    if (m.classList.contains("hidden")) return "already-acked";
+    const agree = document.querySelector("#ym-agree");
+    if (!agree.checked) agree.click();   // 勿盲 click：已勾选时再点会取消勾选并禁用按钮
+    document.querySelector("#ym-start").click();
+    return "acked";
+  })()'
+  ```
+- **杀实例必须带 worktree 路径**，只杀自己的：
+  `pkill -f "$PWD/gui/node_modules"`（二进制路径为
+  `<worktree>/gui/node_modules/electron/dist/xharness.app/...`）。
+- 测试窗口会真实弹出在屏幕上，可能被用户/其他 agent 点掉（实测发生过首启弹窗
+  被人为确认）；断言要对这类干扰容错，别把弹窗状态当成唯一判据。
+
+## 5. 排障
 
 - **连不上端口**（`fetch failed`）：GUI 没起、没带 `--remote-debugging-port`，或
-  端口被旧进程占。杀进程用 `pkill -f "MacOS/xharness"`（匹配 "Electron" 会失手）。
-- **没有匹配的 page 目标**：先 `--list` 看实际目标，用 `--url '<regex>'` 调整匹配。
+  端口被旧进程占。单实例时杀进程用 `pkill -f "MacOS/xharness"`（匹配 "Electron"
+  会失手）；**并发时禁用这条**，按 §4 的带路径模式只杀自己的实例。
+- **没有匹配的 page 目标**：先 `--list` 看实际目标，用 `--url '<regex>'` 调整匹配
+  （多 worktree 并发时 url 里含各自 worktree 路径，可直接按路径区分）。
 - **改了 src/ 行为没变化**：忘了 `npm run build`，GUI 主进程跑的是旧 dist。
 - **页面内异常（退出码 2）**：输出含异常描述，多为选择器失效——渲染层 DOM 变了，
   按 `gui/renderer/index.html` 现状更新检查表达式。
 
-## 5. 边界
+## 6. 边界
 
 - 数据目录是真实用户数据（`~/Library/Application Support/xharness/`），冒烟检查
   **只读优先**：不发真实消息（耗 token、写 session）、不改设置、不删会话。
