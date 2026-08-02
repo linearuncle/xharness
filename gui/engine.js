@@ -316,6 +316,11 @@ export function stop(convId) {
   if (s?.abort) s.abort.abort();
 }
 
+// 回合未结束的会话 id 列表：渲染层启动/重载后据此恢复侧栏运行中指示
+export function runningConvIds() {
+  return [...sessions.entries()].filter(([, s]) => s.running).map(([id]) => id);
+}
+
 export function setModelChoice(convId, providerId, model) {
   const s = sessions.get(convId);
   if (s) {

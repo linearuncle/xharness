@@ -140,7 +140,16 @@ body {
 .sb-conv:hover { background: var(--hover); }
 .sb-conv.active { background: var(--active); }
 .sb-conv .dot { width: 6px; height: 6px; border-radius: 3px; background: var(--accent); margin-left: auto; flex: none; }
-.sb-conv-title { overflow: hidden; text-overflow: ellipsis; }
+/* 运行中指示：圆形 loading（弧色 --accent，轨道色 --accent-soft） */
+.sb-conv .sb-spin {
+  width: 12px; height: 12px; margin-left: auto; flex: none;
+  border-radius: 50%;
+  border: 2px solid var(--accent-soft);
+  border-top-color: var(--accent);
+  animation: sb-spin 0.8s linear infinite;
+}
+@keyframes sb-spin { to { transform: rotate(360deg); } }
+.sb-conv-title { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .sb-pinned-conv { padding-left: 10px; }
 
 .sb-footer {
