@@ -356,7 +356,13 @@ body {
 .btn.primary { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
 .btn.primary:hover { background: #333; }
 .pd-save-row { margin-top: 20px; display: flex; gap: 10px; }
-.settings-gear { margin-left: auto; font-size: 15px; }
+.settings-gear {
+  margin-left: auto;
+  font-size: 22px;
+  line-height: 1;
+  padding: 6px 8px;
+  border-radius: 8px;
+}
 
 /* 弹窗 */
 #modal-backdrop {
