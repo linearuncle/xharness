@@ -8,6 +8,7 @@ import { userInfo, homedir } from "node:os";
 import { Marked } from "marked";
 import { markedHighlight } from "marked-highlight";
 import hljs from "highlight.js";
+import { D2 } from "@terrastruct/d2";
 import * as store from "./store.js";
 import * as engine from "./engine.js";
 import * as oauthXai from "./oauth-xai.js";
@@ -59,6 +60,11 @@ function makeMarked(autoDetect) {
 }
 const markedStream = makeMarked(false);
 const markedFinal = makeMarked(true);
+
+// d2 编译（wasm）首次初始化有开销：懒加载单例，只在聊天出现 d2 代码块时启动
+let d2Instance = null;
+const getD2 = () => (d2Instance ??= new D2());
+let d2Seq = 0; // 同页多张图的 SVG id 去重盐值
 
 function escapeHtml(s) {
   return s
@@ -632,6 +638,30 @@ ipcMain.handle("ctx:get", (_e, projectDir) =>
 ipcMain.handle("md:render", (_e, { text, final }) =>
   (final ? markedFinal : markedStream).parse(text ?? "")
 );
+
+// d2/d2lang 代码块 → SVG（编译在 wasm 内完成，纯本地无网络；SVG 消毒在渲染层）
+ipcMain.handle("d2:render", async (_e, { source, dark }) => {
+  try {
+    const d = getD2();
+    const result = await d.compile(source ?? "");
+    const svg = await d.render(result.diagram, {
+      ...result.renderOptions,
+      themeID: dark ? 200 : 0, // 200 = Dark Mauve（d2 内置深色主题）
+      noXMLTag: true, // 内嵌 HTML 不需要 <?xml?> 头
+      pad: 16, // 默认 100 对聊天展示太大
+      salt: `d2-${++d2Seq}`,
+    });
+    return { svg };
+  } catch (err) {
+    // d2 编译报错为 JSON 数组（range + errmsg，含行号），提取可读文本；非 JSON 原样返回
+    let msg = String(err?.message ?? err);
+    try {
+      const arr = JSON.parse(msg);
+      if (Array.isArray(arr)) msg = arr.map((e) => e?.errmsg ?? String(e)).join("；");
+    } catch { /* 非 JSON 报错，原样展示 */ }
+    return { error: msg };
+  }
+});
 
 ipcMain.handle("chat:answer", (_e, { id, text }) => engine.answer(id, text));
 
