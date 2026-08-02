@@ -198,6 +198,7 @@ app.on("window-all-closed", () => app.quit());
 ipcMain.handle("state:get", () => ({
   username: userInfo().username,
   sidebar: store.sidebarData(),
+  runningConvs: engine.runningConvIds(),
   providers: store.getProvidersSafe(),
   efforts: engine.EFFORTS,
   yoloAcked: existsSync(ACK_FILE),

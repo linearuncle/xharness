@@ -22,6 +22,7 @@ const S = {
   general: null, // 通用设置（boot 时载入）
   compactionStrategies: [],
   statsByConv: {}, // convId -> 会话统计（engine stats 事件）
+  runningConvs: new Set(), // 回合未结束的会话 id（侧栏圆形 loading 指示）
 };
 
 const DEFAULT_MODEL_ID = "deepseek-v4-flash";
@@ -84,7 +85,9 @@ function convRow(c, pinned) {
   const el = document.createElement("div");
   el.className = "sb-conv" + (pinned ? " sb-pinned-conv" : "");
   if (c.id === S.activeConv) el.classList.add("active");
-  el.innerHTML = `<span class="sb-conv-title">${esc(c.title)}</span>`;
+  el.innerHTML =
+    `<span class="sb-conv-title">${esc(c.title)}</span>` +
+    (S.runningConvs.has(c.id) ? `<span class="sb-spin" title="运行中"></span>` : "");
   el.onclick = () => openConversation(c.id);
   el.oncontextmenu = (e) => {
     e.preventDefault();
@@ -258,6 +261,8 @@ async function sendCurrent() {
   list.appendChild(el(`<div class="msg-user"><div class="bubble">${esc(text)}</div></div>`));
   beginTurn(list);
   setRunning(true);
+  S.runningConvs.add(S.activeConv);
+  renderSidebar();
   scrollBottom(true);
   const paths = S.attachments.map((a) => a.path);
   S.attachments = [];
@@ -367,6 +372,8 @@ async function flushSegRender(t) {
 }
 
 function onAgentEvent({ id, event }) {
+  // 回合结束对后台会话同样生效：清掉侧栏运行中指示（delete 返回是否有变更）
+  if (event.type === "turn_end" && S.runningConvs.delete(id)) renderSidebar();
   if (id !== S.activeConv) return; // 简化：只渲染当前会话
   const t = S.turn;
   if (!t) return;
@@ -879,6 +886,7 @@ async function boot() {
   S.providers = st.providers;
   S.efforts = st.efforts;
   S.sidebar = st.sidebar;
+  S.runningConvs = new Set(st.runningConvs ?? []);
   S.meta = { ...defaultChoice() };
   // 外观：启动即应用，之后跟随系统深浅变化
   S.appearance = st.appearance;
