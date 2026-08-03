@@ -79,13 +79,31 @@ node gui/scripts/cdp-eval.mjs '
 
 ## 4. 多 worktree 并发隔离
 
-多个 agent 或 worktree 同时测试时，不能共享 9223 和真实数据目录。每个 worktree 用唯一 `.xhtest-*` 目录和自动端口：
+多个 agent 或 worktree 同时测试时，不能共享 9223 和真实数据目录。每个 worktree 用唯一 `.xhtest-*` 目录和自动端口。
+
+若在手工终端启动，可以前台挂住这个终端：
 
 ```bash
 TEST_DATA_DIR="$PWD/.xhtest-agent-name"
 mkdir -p "$TEST_DATA_DIR"
 XH_DATA_DIR="$TEST_DATA_DIR" npm --prefix gui start -- --remote-debugging-port=0 \
   > "$TEST_DATA_DIR/cdp.log" 2>&1
+```
+
+若在 xharness / agent 的 Bash 工具里启动，必须让 GUI 进程完全后台脱离，并把“启动”和“读取 CDP 地址”拆成两条工具调用；否则 Bash 工具会一直等 `npm start` 退出，即使 GUI 窗口已经打开：
+
+```bash
+TEST_DATA_DIR="$PWD/.xhtest-agent-name"
+mkdir -p "$TEST_DATA_DIR"
+nohup env XH_DATA_DIR="$TEST_DATA_DIR" npm --prefix gui start -- --remote-debugging-port=0 \
+  > "$TEST_DATA_DIR/cdp.log" 2>&1 < /dev/null &
+```
+
+随后单独读取自动端口：
+
+```bash
+TEST_DATA_DIR="$PWD/.xhtest-agent-name"
+grep -o "DevTools listening on ws://[^ ]*" "$TEST_DATA_DIR/cdp.log" | tail -1
 ```
 
 连接隔离实例时追加 `--data-dir`：
