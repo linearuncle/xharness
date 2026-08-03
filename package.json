@@ -1,6 +1,6 @@
 {
   "name": "xharness",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "TypeScript coding agent harness (Claude Code style MVP)",
   "type": "module",
   "bin": {
