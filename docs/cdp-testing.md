@@ -97,6 +97,7 @@ TEST_DATA_DIR="$PWD/.xhtest-agent-name"
 mkdir -p "$TEST_DATA_DIR"
 nohup env XH_DATA_DIR="$TEST_DATA_DIR" npm --prefix gui start -- --remote-debugging-port=0 \
   > "$TEST_DATA_DIR/cdp.log" 2>&1 < /dev/null &
+echo $! > "$TEST_DATA_DIR/gui.pid"
 ```
 
 随后单独读取自动端口：
@@ -112,6 +113,24 @@ grep -o "DevTools listening on ws://[^ ]*" "$TEST_DATA_DIR/cdp.log" | tail -1
 TEST_DATA_DIR="$PWD/.xhtest-agent-name"
 node gui/scripts/cdp-eval.mjs --data-dir "$TEST_DATA_DIR" --list
 node gui/scripts/cdp-eval.mjs --data-dir "$TEST_DATA_DIR" 'document.title'
+```
+
+隔离实例验证结束后必须关闭，不能让测试 GUI 留在 Dock 里。先杀启动时记录的 npm 进程；
+若 Electron 已脱离父进程，再按同一个 `XH_DATA_DIR` 找到对应的 app 主进程关闭。只匹配本次
+`TEST_DATA_DIR`，不要用宽泛 `pkill -f "MacOS/xharness"`：
+
+```bash
+TEST_DATA_DIR="$PWD/.xhtest-agent-name"
+if [ -f "$TEST_DATA_DIR/gui.pid" ]; then
+  kill "$(cat "$TEST_DATA_DIR/gui.pid")" 2>/dev/null || true
+fi
+main_pids="$(ps -axo pid,ppid,command | awk -v dir="$TEST_DATA_DIR" '
+  $0 ~ "xharness.app" && $0 ~ dir { print $2 }
+' | sort -u)"
+if [ -n "$main_pids" ]; then
+  kill $main_pids 2>/dev/null || true
+fi
+ps -axo pid,ppid,command | grep -F "$TEST_DATA_DIR" | grep -v grep || true
 ```
 
 隔离目录默认没有供应商 key。若专项测试需要真实模型调用，建议从环境变量预置 DeepSeek key
@@ -144,11 +163,8 @@ writeFileSync(join(dir, "settings.jsonl"), JSON.stringify({ op: "upsert", provid
 '
 ```
 
-并发场景禁止执行宽泛 `pkill -f "MacOS/xharness"`。只结束当前 worktree 实例时，用：
-
-```bash
-pkill -f "$PWD/gui/node_modules/electron/dist/xharness.app"
-```
+并发场景禁止执行宽泛 `pkill -f "MacOS/xharness"`。只结束当前 worktree 实例时，按上面的
+`TEST_DATA_DIR` 精确清理。
 
 ## 5. 需求专项
 
@@ -196,5 +212,6 @@ GUI 验证：通过 / 失败
 - 标准冒烟：快速冒烟结果
 - 需求专项：操作路径、关键断言、实际结果
 - 数据影响：是否写入真实数据、发送真实消息、修改设置，是否恢复
+- 测试实例清理：隔离 GUI 是否已关闭，残留进程检查结果
 - 未覆盖项：没有则写“无”
 ```
