@@ -1,8 +1,8 @@
 # GUI 需求完成后的 CDP 验证指南
 
 本文是 GUI 需求的完成门禁，供 AI 在每次实现功能或修复问题后直接执行。目标不是证明
-“应用能启动”，而是用可重复的断言证明：应用壳未回归、本次需求确实生效、关键边界得到
-覆盖，并留下可核对的测试结果。
+“应用能启动”，而是用可重复的断言证明：基础界面和导航没有被破坏、本次需求确实生效、
+关键边界得到覆盖，并留下可核对的测试结果。
 
 xharness 是 Electron 应用（主进程 `gui/main.js`，渲染层 `gui/renderer/`）。启动时加入
 `--remote-debugging-port` 后，可以通过 Chrome DevTools Protocol（CDP）连接渲染进程，
@@ -103,7 +103,7 @@ Promise 会被自动等待。退出码 `0` 表示表达式执行成功，`1` 表
 
 以下命令均从 `gui/` 目录执行，默认连接 9223 端口。
 
-### 3.1 应用壳与输入区
+### 3.1 基础界面、导航与输入区
 
 ```bash
 node scripts/cdp-eval.mjs '
@@ -118,7 +118,7 @@ node scripts/cdp-eval.mjs '
   };
   const assert = (ok, message) => { if (!ok) throw new Error(message); };
   assert(result.title === "xharness", `标题异常: ${result.title}`);
-  assert(result.sidebar && result.composer && result.sendButton, "应用壳或输入区缺失");
+  assert(result.sidebar && result.composer && result.sendButton, "基础界面、导航或输入区缺失");
   assert(result.yoloBadge?.includes("完全访问"), `YOLO 标记异常: ${result.yoloBadge}`);
   assert(["CDP:9223", "CDP:auto"].includes(result.debugBadge),
     `CDP 标记异常: ${result.debugBadge}`);
@@ -313,7 +313,7 @@ node scripts/cdp-eval.mjs '
 GUI 验证：通过 / 失败
 - 代码级检查：执行了哪些命令，结果是什么
 - 构建与重启：开发版或打包版、固定端口或隔离数据目录
-- 标准冒烟：应用壳、设置交互、IPC 脱敏三项结果
+- 标准冒烟：基础界面、设置交互、IPC 脱敏三项结果
 - 需求专项：操作路径、关键断言、实际结果
 - 数据影响：是否发送真实消息、修改设置或新增测试会话，是否已恢复
 - 未覆盖项：没有则写“无”；有则说明原因和风险
