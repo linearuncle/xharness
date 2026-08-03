@@ -25,6 +25,7 @@ const S = {
   compactionStrategies: [],
   statsByConv: {}, // convId -> 会话统计（engine stats 事件）
   runningConvs: new Set(), // 回合未结束的会话 id（侧栏圆形 loading 指示）
+  collapsedProjects: new Set(), // 侧栏折叠的项目 dir（仅内存态，不持久化）
 };
 
 const DEFAULT_MODEL_ID = "deepseek-v4-flash";
@@ -64,15 +65,32 @@ function renderSidebar() {
   const wrap = $("sb-projects");
   wrap.innerHTML = "";
   for (const p of sb.projects) {
+    const collapsed = S.collapsedProjects.has(p.dir);
     const row = document.createElement("div");
     // 有当前对话时只高亮对话行；无对话（项目空态）才高亮项目
     const projectOn = p.dir === S.activeProject && !S.activeConv;
     row.className = "sb-project" + (projectOn ? " active" : "");
-    row.innerHTML = `<span class="ic">🗂</span><span>${esc(p.name)}</span>`;
-    row.onclick = () => selectProject(p.dir);
+    row.innerHTML =
+      `<span class="sb-chev${collapsed ? "" : " open"}">▸</span>` +
+      `<span class="ic">🗂</span><span>${esc(p.name)}</span>` +
+      (p.conversations.length ? `<span class="sb-count">${p.conversations.length}</span>` : "");
+    row.onclick = () => onProjectClick(p.dir);
     wrap.appendChild(row);
-    for (const c of p.conversations) wrap.appendChild(convRow(c));
+    if (!collapsed) for (const c of p.conversations) wrap.appendChild(convRow(c));
   }
+}
+
+// 点击项目文件夹：折叠/展开该项目对话列表（不切走当前对话）；
+// 无会话打开（空态）时若点的是别的项目，顺带切换项目，保留“在此项目开新对话”入口
+function onProjectClick(dir) {
+  const t = S.collapsedProjects;
+  if (t.has(dir)) t.delete(dir);
+  else t.add(dir);
+  if (!S.activeConv && dir !== S.activeProject) {
+    selectProject(dir);
+    return;
+  }
+  renderSidebar();
 }
 
 function convRow(c) {
