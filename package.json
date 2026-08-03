@@ -8,6 +8,7 @@
   },
   "scripts": {
     "build": "tsc",
+    "gui:dev": "node gui/scripts/dev-gui.mjs",
     "test": "vitest run --project unit",
     "test:e2e": "npm run build && vitest run --project e2e"
   },

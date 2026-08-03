@@ -32,21 +32,22 @@ GUI 测试默认使用 dev 实例，不要求每次打包。CDP 由 `gui/scripts
 # 仅当本次改动涉及 src/ 或 dist 依赖时执行
 npm run build
 
-pkill -f "MacOS/xharness"
-npm --prefix gui start -- --remote-debugging-port=9223
+npm run gui:dev -- restart
+npm run gui:dev -- status
 ```
 
-`pkill -f "MacOS/xharness"` 只允许在确认没有其他 worktree 或用户实例并行运行时使用。并发时必须走第 4 节隔离流程。
+`gui:dev` 默认使用真实数据目录 `~/Library/Application Support/xharness`，用于覆盖真实项目、
+会话和设置组合。并发时必须走第 4 节隔离流程，显式传 `--data-dir`。
 
-在另一个终端确认连接：
+确认连接：
 
 ```bash
-node gui/scripts/cdp-eval.mjs --list
-node gui/scripts/cdp-eval.mjs 'document.title'
+node gui/scripts/cdp-eval.mjs --data-dir "$HOME/Library/Application Support/xharness" --list
+node gui/scripts/cdp-eval.mjs --data-dir "$HOME/Library/Application Support/xharness" 'document.title'
 ```
 
 成功标准：`--list` 能看到当前仓库的 `file://.../gui/renderer/index.html` page，标题为
-`xharness`。固定端口可能误连旧实例，所以必须看 page URL。
+`xharness`。自动端口由 `gui:dev` 写入真实数据目录的 `cdp.log`。
 
 ## 3. 快速标准冒烟
 
@@ -55,7 +56,7 @@ node gui/scripts/cdp-eval.mjs 'document.title'
 从仓库根目录执行：
 
 ```bash
-node gui/scripts/cdp-eval.mjs '
+node gui/scripts/cdp-eval.mjs --data-dir "$HOME/Library/Application Support/xharness" '
 (async () => {
   const assert = (ok, message) => { if (!ok) throw new Error(message); };
   const result = {
