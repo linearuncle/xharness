@@ -185,7 +185,10 @@ description 文本是工具质量的核心，须参照 Claude Code 的措辞风�
 - **F8 Edit**：old_string → new_string 精确替换；old_string 必须在文件中**唯一**匹配，
   0 次或多次匹配都报错（错误信息告知匹配次数）；支持 `replace_all` 参数。
 - **F9 Grep**：内容正则搜索，封装 `rg`（硬依赖，见 §2，**不实现 JS 回退**）；
-  参数：pattern、path、glob 过滤；返回 文件:行号:内容。
+  参数：pattern、path、glob 过滤；返回 文件:行号:内容。2026-08-03 起执行改为异步流式，
+  响应 AbortSignal；默认 20s 超时、目录遍历时跳过 >5MB 文件；结果最多 200 行、单行 1000 字符、
+  模型可见总量 40000 UTF-8 bytes，原始 stdout 最多 5MB，触顶立即终止 `rg` 并在
+  tool_result 中明确标注截断原因（截断仍为成功结果）。
 - **F10 Glob**：文件名模式匹配，按修改时间排序返回路径列表。
 - **F11 AskUserQuestion**：模型向用户提选择题。参数：question、options（2-4 个，各含 label+description）。
   终端渲染编号选项，用户可输数字选择或直接输入自由文本（等价"Other"）。
