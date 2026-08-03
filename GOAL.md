@@ -109,8 +109,8 @@ xharness/
     `maybeCompact`/`forceCompact`（`compaction/index.ts`）按 `config.compactionStrategy`
     分发，未知/未设 id 回退默认策略（容错不抛错）。**禁止在调用方按策略 id 写特殊分支**；
     新增算法只需实现接口并注册。选择途径：CLI 环境变量 `XHARNESS_COMPACT_STRATEGY`
-    （在 `loadConfig()` 校验）；GUI 设置 → 通用 → 上下文压缩策略（settings.jsonl
-    `general` 事件持久化，全局生效）。
+    （在 `loadConfig()` 校验）；GUI 设置 → 通用 → 上下文压缩策略（SQLite kv 表
+    `general` 行持久化，全局生效，§4.16）。
   - 自动：触发条件归策略自有；手动 `/compact` 随时触发；**自动与手动共用策略的同一
     compact 实现**，禁止两套路径。
   - 压缩产物统一：模型总结的 summary 以**一条带 `[历史摘要]` 前缀标记的 user 消息**注入，
@@ -321,9 +321,9 @@ description 文本是工具质量的核心，须参照 Claude Code 的措辞风�
   apiKey 传 null）。请求前 token 剩余有效期不足（提前 5 分钟）即用 refresh token
   刷新并落盘（refresh 未轮换时沿用旧值）；刷新失败提示重新登录。
 - **存储**：内置供应商 `grok`（`authType:"oauth-xai"`，builtin），oauth 凭据与
-  apiKey 同级敏感——明文存 settings.jsonl（既有决策，权限 600），变更走整文件
-  重写；IPC 脱敏视图剥离 oauth，仅暴露 hasKey；普通"保存"不携带 oauth 字段时
-  沿用已存凭据（防止保存表单清掉登录态）。
+  apiKey 同级敏感——明文存 SQLite providers 表（既有决策，库文件权限 600，§4.16），
+  变更为单行覆盖写（旧凭据无残留）；IPC 脱敏视图剥离 oauth，仅暴露 hasKey；
+  普通"保存"不携带 oauth 字段时沿用已存凭据（防止保存表单清掉登录态）。
 - **GUI**：设置 → 模型设置的 Grok 详情页以"账号"登录区替代 API Key 输入
   （登录/重新登录/退出登录 + 设备码展示区）；供应商列表 Grok 行使用 lobehub
   Grok 图标（MIT，currentColor 随主题）。内置模型：grok-4.3（2M 窗口，含官方
@@ -337,7 +337,7 @@ description 文本是工具质量的核心，须参照 Claude Code 的措辞风�
   模型列表/上下文窗口/分项定价运行时自动来自 https://models.dev/api.json
   （pi 在构建期生成静态目录，我们改为运行时拉取）。
 - **同步机制**（`gui/model-catalog.js`）：GUI 启动后台异步同步（24h TTL 缓存于
-  数据目录 `models-catalog.json`，仅存所需供应商子集）；设置页"立即同步"按钮
+  SQLite kv 表 `modelsCatalog` 键，§4.16，仅存所需供应商子集）；设置页"立即同步"按钮
   强制刷新；拉取失败静默回退缓存→种子数据，离线永不破坏可用性；有实际差异才
   写 settings（幂等）。过滤规则同 pi：仅 `tool_call === true` 且窗口 ≥8K 的模型。
 - **分层定价**：pricing 结构扩展 `tiers: [{inputTokensAbove, input, output,
@@ -429,8 +429,8 @@ description 文本是工具质量的核心，须参照 Claude Code 的措辞风�
   low→low，high/max→high；不带 `reasoning.summary`。部分模型（如 grok-4-1-fast）
   不支持 reasoning 参数会 400，客户端自动去 reasoning 重试一次（未产出流事件前）。
 - **GUI**：内置 grok 供应商种子 `apiFormat` 改 `openai-responses`；设置 → 供应商
-  详情页「API 格式」下拉启用（两格式可选，所有供应商可编辑）——**存量
-  settings.jsonl 不迁移**（零迁移原则），老用户经该下拉手动切换。CLI 不接入
+  详情页「API 格式」下拉启用（两格式可选，所有供应商可编辑）——**存量设置
+  不迁移**（零迁移原则），老用户经该下拉手动切换。CLI 不接入
   （环境变量路径恒 anthropic）。
 - 验收：单测覆盖消息转换全表/SSE 翻译/usage 拆分/reasoning 降级/分发器；
   curl 实测 api.x.ai /v1/responses 流式事件与 reasoning 档位；GUI grok 全流程
@@ -441,9 +441,8 @@ description 文本是工具质量的核心，须参照 Claude Code 的措辞风�
 - **动机**：GUI 模型选择是会话内运行时状态（只存内存），新对话/重启后一律回落
   安装默认 `deepseek-v4-flash + high`；用户在 grok 与 deepseek 间切换时，每次新
   对话都得重选。
-- **方案**：`settings.jsonl` 的 general 增加 `lastChoice: {providerId, model, effort}`，
-  经既有 `setGeneral` 深合并落盘（append-only；换 key 整文件重写时随 general 一并
-  保留）。记录时机：① 会话内切换（`engine.setModelChoice`/`setEffort`，含首条消息
+- **方案**：kv 表 `general` 行增加 `lastChoice: {providerId, model, effort}`，
+  经既有 `setGeneral` 深合并落盘（单行覆盖写，§4.16）。记录时机：① 会话内切换（`engine.setModelChoice`/`setEffort`，含首条消息
   发送时渲染层应用选择）；② 空态（无会话）改模型/推理强度，走新增
   `choice:setLast` IPC，不绑定会话。
 - **读取**：`engine.defaultChoice()` 与渲染层 `defaultChoice()` 均改为优先取
@@ -529,6 +528,30 @@ description 文本是工具质量的核心，须参照 Claude Code 的措辞风�
   3. 缺 `ANTHROPIC_API_KEY` 时 assign 失败且 **不** 新建 Run、Issue 仍 `todo`；
   4. platform 模块依赖图不含 `ui/*` 与 `@anthropic-ai/sdk`；
   5. `tsc --noEmit` + `npm test` 绿；既有 `xharness -p` 冒烟仍可用。
+
+### 4.16 GUI 持久化迁移 SQLite（2026-08-03 变更）
+
+- **动机**：JSONL 四件套（projects/settings/sessions/attachments）的已知缺口——
+  settings 整文件 rewrite 非原子、append 失败致内存/磁盘漂移、外观/通用事件只增
+  不瘦、附件裸文件无生命周期、启动全量重放。借平台侧（§4.15）同样选定 SQLite
+  的契机，GUI 存储统一入库。
+- **决策**：单库 `<数据目录>/xharness.db`，**`node:sqlite`（Node 内置）**，零新增
+  依赖（better-sqlite3 需按 Electron ABI 重编译，否决；wasm 方案全量读写，否决）。
+  WAL + `synchronous=NORMAL`；六表：projects/providers/kv/conversations/blocks/
+  attachments（全部 `WITHOUT ROWID` 聚簇主键）；模型目录缓存并入 kv 表
+  （`modelsCatalog` 键），`models-catalog.json` 废止。
+- **行为等价（硬要求）**：`gui/store.js` 对外 API 与全部语义不变——内存镜像 +
+  同步写穿、写失败仅打日志、/clear 只推进 `cleared_seq` 水位（旧块保留考古）、
+  标题仅默认时可改、供应商 `pos` 保序与内置种子、脱敏视图、oauth 沿用。
+  敏感变更（key/oauth/删供应商）由整文件 rewrite 改为**单行覆盖写**（旧密文
+  无残留窗口）；库文件与 WAL 侧车均 chmod 600（侧车不继承主库权限，openDb 补
+  chmod）。附件 BLOB 入库，`xatt://` 按名取 BLOB，渲染层引用改 `att:<名>`
+  不透明令牌。**零迁移**：旧 JSONL 不导入不删除，按全新安装处理。
+- **性能要求**：启动只读 meta、会话 blocks 首次访问懒加载；预编译语句复用。
+  实测：5000 块写入 ≈103ms、50 会话冷启动 ≈2ms。
+- **架构与排障细节见 `docs/storage-sqlite.md`**（存储层唯一权威文档）。
+- **验收**：新旧 store 同操作序列快照逐字段一致（32 项断言）；
+  `docs/gui-test-cases/20260803-sqlite-storage.md` CDP 6 用例全过（含重启重放）。
 
 ## 5. Tranche 划分（PM 按序推进，每个 tranche 结束交 Judge 审）
 

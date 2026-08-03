@@ -132,32 +132,29 @@ ps -axo pid,ppid,command | grep -F "$TEST_DATA_DIR" | grep -v grep || true
 ```
 
 隔离目录默认没有供应商 key。若专项测试需要真实模型调用，建议从环境变量预置 DeepSeek key
-到隔离目录的 `settings.jsonl`，再启动 GUI。GUI 仍只读取设置文件，不在运行时读取环境变量：
+到隔离目录的 SQLite 库（经 `gui/store.js` 写入，schema 自动建好），再启动 GUI。
+GUI 仍只读取设置库，不在运行时读取环境变量：
 
 ```bash
 TEST_DATA_DIR="$PWD/.xhtest-agent-name"
-TEST_DATA_DIR="$TEST_DATA_DIR" DEEPSEEK_API_KEY="$DEEPSEEK_API_KEY" node -e '
-const { mkdirSync, writeFileSync } = require("node:fs");
-const { join } = require("node:path");
-const dir = process.env.TEST_DATA_DIR;
-const key = process.env.DEEPSEEK_API_KEY;
-if (!dir) throw new Error("TEST_DATA_DIR is required");
-if (!key) throw new Error("DEEPSEEK_API_KEY is required");
-mkdirSync(dir, { recursive: true });
-const provider = {
+XH_DATA_DIR="$TEST_DATA_DIR" DEEPSEEK_API_KEY="$DEEPSEEK_API_KEY" node --input-type=module -e '
+if (!process.env.XH_DATA_DIR) throw new Error("XH_DATA_DIR is required");
+if (!process.env.DEEPSEEK_API_KEY) throw new Error("DEEPSEEK_API_KEY is required");
+const store = await import("./gui/store.js");
+store.load();
+store.upsertProvider({
   id: "deepseek",
   name: "DeepSeek",
   baseUrl: "https://api.deepseek.com/anthropic",
   apiFormat: "anthropic",
-  apiKey: key,
+  apiKey: process.env.DEEPSEEK_API_KEY,
   enabled: true,
   builtin: true,
   models: [
     { id: "deepseek-v4-flash", contextWindow: 1000000 },
     { id: "deepseek-v4-pro", contextWindow: 1000000 }
   ]
-};
-writeFileSync(join(dir, "settings.jsonl"), JSON.stringify({ op: "upsert", provider, ts: Date.now() }) + "\n", { mode: 0o600 });
+});
 '
 ```
 

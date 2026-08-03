@@ -9,8 +9,8 @@ shell 命令）在你的机器上**直接执行，无确认、无沙箱、无命
 - 模型可能读写工作目录之外的文件、执行任意命令；
 - 请只在可信任务与非关键目录使用，重要数据先做好版本控制/备份；
 - GUI 的 API Key **必须手动填写**，**明文**保存在
-  `~/Library/Application Support/xharness/settings.jsonl`（权限 600，防同机其他用户）；
-  文件被拷贝/备份即泄露（GUI 不读环境变量）。
+  `~/Library/Application Support/xharness/xharness.db`（权限 600，防同机其他用户）；
+  库文件被拷贝/备份即泄露（GUI 不读环境变量）。
 
 ## 支持版本
 

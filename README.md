@@ -86,9 +86,10 @@ Messages**（`/v1/messages`）与 **OpenAI Responses**（`/v1/responses`）。An
 
 全部在本地，没有任何云端同步：
 
-- 会话记录、项目列表、附件图片：`~/Library/Application Support/xharness/`（逐条追加的
-  JSONL 文件，程序崩溃也不会损坏历史）
-- API Key：同目录 `settings.jsonl`，文件权限 600（同机其他用户读不了）。**注意是明文
+- 会话记录、项目列表、附件图片：`~/Library/Application Support/xharness/xharness.db`
+  （SQLite 单库 + WAL，程序崩溃也不会损坏历史；架构细节见
+  [docs/storage-sqlite.md](docs/storage-sqlite.md)）
+- API Key：同库 providers 表内，库文件权限 600（同机其他用户读不了）。**注意是明文
   保存**——这是为了避免 macOS 钥匙串反复弹授权框的取舍，介意的话请勿在共用电脑上填 key
 
 ## 🛡 完全访问，但带护栏

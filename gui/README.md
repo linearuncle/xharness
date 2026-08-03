@@ -18,12 +18,12 @@ ANTHROPIC_API_KEY=你的key npm start
 ## 功能
 
 - **项目/会话**：左侧栏管理多项目多会话（右键会话可置顶/删除）
-- **JSONL 持久化**（append-only 事件日志，防崩溃）：
-  - `~/Library/Application Support/xharness/sessions/<会话id>.jsonl` —— 首行 meta，此后每行一个消息/工具/notice 块，
-    标题与置顶变更以 `meta_update` 行追加，`/clear` 以 `clear` 行追加，启动时重放重建。
+- **SQLite 持久化**（`node:sqlite` 单库 + WAL，防崩溃；架构见 `../docs/storage-sqlite.md`）：
+  - `~/Library/Application Support/xharness/xharness.db` —— 六张表：conversations（会话 meta）/
+    blocks（消息/工具/notice 块，`/clear` 只推进水位、旧块保留考古）/ projects / providers /
+    kv（外观、通用设置、模型目录缓存）/ attachments（附件 BLOB）。
     工具块（`kind:"tool"`）含 `name`、`id`、`summary`、`isError`、`input`、`result`（长字段截断），
     便于对照空参数/插件拦截/工具校验失败等排障
-  - `~/Library/Application Support/xharness/projects.jsonl` —— 项目增删操作日志
 - **空态建议卡**：探索 / 构建 / 审查 / 修复 四张卡一键填入
 - **流式会话**：文本流式渲染、`已处理 Ns` 计时、工具调用行（已运行/已读取/已编辑…）、
   思考内容折叠展示（点击"已思考"展开）、最终 markdown 渲染
@@ -35,13 +35,13 @@ ANTHROPIC_API_KEY=你的key npm start
 - **设置界面**（侧栏底部 ⚙）：模型供应商管理——默认内置 DeepSeek（不可删）；
   可添加自定义供应商（名称 / Base URL / API Key / 模型列表），API 格式固定 Anthropic Messages；
   API Key **必须手动填写**（可切换明文显示，不读环境变量）；模型条目含模型 ID 与上下文窗口；
-  配置持久化于 `~/Library/Application Support/xharness/settings.jsonl`（append-only，与会话数据同规范）
+  配置持久化于 `~/Library/Application Support/xharness/xharness.db`（providers/kv 表，与会话数据同库）
 - **外观设置**（设置 → 外观）：主题模式（系统/浅色/深色，系统随 macOS 深浅自动切换）；
   浅/深两套主题独立配置——内置 13 个预设（Codex/Dracula/GitHub/Gruvbox/Catppuccin/
   Everforest/Ayu/Nord/One/Solarized/Tokyo Night/Linear/Notion），也可自定义
   强调色/背景/前景三基色（其余界面色由三基色+对比度自动推导）、UI 字体、代码字体、
   半透明侧栏（macOS vibrancy）与对比度；主题 JSON 可经剪贴板导入/复制分享；
-  代码块高亮随深浅切换 hljs 主题；配置持久化于 settings.jsonl（appearance 事件）
+  代码块高亮随深浅切换 hljs 主题；配置持久化于 kv 表（appearance 行）
 - **上下文条**：项目名 · 本地 · git 分支；右上"环境信息"面板显示变更文件
 - **YOLO 提示**：橙色"⚠ 完全访问"徽标——与 CLI 相同，无沙箱、工具直接执行
 
@@ -59,8 +59,8 @@ GUI 与 CLI 完全一致：模型发起的文件读写与 shell 命令在你的�
 首次启动需勾选确认后方可使用。
 
 - 只在可信任务与非关键目录使用；重要数据先做好版本控制/备份
-- API Key **明文**存于 `~/Library/Application Support/xharness/settings.jsonl`（权限 600，防同机其他用户）；文件被拷走即泄露
-- 附件与粘贴的图片保存在 `~/Library/Application Support/xharness/attachments/`
+- API Key **明文**存于 `~/Library/Application Support/xharness/xharness.db`（权限 600，防同机其他用户）；库文件被拷走即泄露
+- 附件与粘贴的图片保存在同库 attachments 表（BLOB）
 - 风险自负；威胁模型与漏洞报告见仓库根目录 `SECURITY.md`
 
 ## 打包本地安装（macOS）

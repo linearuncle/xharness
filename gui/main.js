@@ -1,6 +1,6 @@
 import { app, BrowserWindow, ipcMain, dialog, nativeImage, nativeTheme, protocol, shell } from "electron";
 import {
-  readFileSync, writeFileSync, mkdirSync, copyFileSync, existsSync, rmSync,
+  readFileSync, writeFileSync, mkdirSync, existsSync, rmSync,
 } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, basename, resolve } from "node:path";
@@ -21,13 +21,12 @@ import {
 } from "../dist/plugins/install.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const ATT_DIR = join(store.DATA_DIR, "attachments");
 let win = null;
 
 app.setName("xharness");
 
 // 多实例/并发测试隔离：XH_DATA_DIR 同时改写 Chromium userData
-// （DevToolsActivePort 等落点）与 store.js 的 JSONL 数据目录，两者必须同目录
+// （DevToolsActivePort 等落点）与 store.js 的 SQLite 数据目录，两者必须同目录
 if (process.env.XH_DATA_DIR) app.setPath("userData", process.env.XH_DATA_DIR);
 
 // Finder 启动的 GUI 不继承 shell PATH：优先用打包内置的 bin（含 rg），
@@ -100,9 +99,13 @@ function isKnownProject(dir) {
     .projects.some((p) => p.dir === dir);
 }
 
-// 附件只允许来自受控目录（渲染进程不可指定任意路径）
-function inAttachmentsDir(p) {
-  return typeof p === "string" && resolve(p).startsWith(ATT_DIR + "/");
+// 附件名为入库主键（paste-*.png / <时间戳>-<原名>），渲染进程不可指定任意名；
+// 校验等价于原「必须在受控附件目录内」：防路径穿越
+function attNameOk(name) {
+  return (
+    typeof name === "string" && name.length > 0 &&
+    name === basename(name) && name !== "." && name !== ".."
+  );
 }
 
 const appIcon = nativeImage.createFromPath(join(here, "assets", "icon.png"));
@@ -193,15 +196,16 @@ app.whenReady().then(async () => {
     app.quit();
     return;
   }
-  // xatt:// 自定义协议：只从附件目录按文件名取图，杜绝任意 file:// 路径
+  // xatt:// 自定义协议：只按附件名从库内取 BLOB，杜绝任意 file:// 路径
   protocol.handle("xatt", (req) => {
     try {
       const name = basename(decodeURIComponent(new URL(req.url).pathname));
-      const p = join(ATT_DIR, name);
-      if (!inAttachmentsDir(p) || !existsSync(p)) return new Response("", { status: 404 });
+      if (!attNameOk(name)) return new Response("", { status: 404 });
+      const row = store.getAttachment(name);
+      if (!row) return new Response("", { status: 404 });
       const ext = name.split(".").pop().toLowerCase();
       const mime = IMAGE_MEDIA[ext] ?? "application/octet-stream";
-      return new Response(readFileSync(p), { headers: { "content-type": mime } });
+      return new Response(row.data, { headers: { "content-type": mime } });
     } catch {
       return new Response("", { status: 400 });
     }
@@ -706,17 +710,15 @@ ipcMain.handle("block:append", (_e, { id, block }) => {
   win?.webContents.send("sidebar:update", store.sidebarData());
 });
 
-// 剪贴板粘贴的图片：落盘到受控附件目录
+// 剪贴板粘贴的图片：BLOB 入库（attachments 表），返回 att:<名> 令牌作为后续引用
 ipcMain.handle("attach:save-clipboard", (_e, { base64, ext }) => {
   const safeExt = ["png", "jpg", "jpeg", "webp", "gif"].includes(ext) ? ext : "png";
-  mkdirSync(ATT_DIR, { recursive: true });
   const name = `paste-${Date.now()}.${safeExt}`;
-  const path = join(ATT_DIR, name);
-  writeFileSync(path, Buffer.from(base64, "base64"));
-  return { path, name };
+  store.saveAttachment(name, Buffer.from(base64, "base64"));
+  return { path: `att:${name}`, name };
 });
 
-// 文件选择器选中的附件：统一拷贝进受控附件目录后再使用
+// 文件选择器选中的附件：读入 attachments 表后再使用（path 为 att:<入库名> 令牌）
 ipcMain.handle("attach:pick", async () => {
   const r = await dialog.showOpenDialog(win, {
     properties: ["openFile", "multiSelections"],
@@ -726,14 +728,12 @@ ipcMain.handle("attach:pick", async () => {
     ],
   });
   if (r.canceled) return [];
-  mkdirSync(ATT_DIR, { recursive: true });
   const out = [];
   for (const p of r.filePaths) {
     const name = `${Date.now()}-${basename(p)}`;
-    const dest = join(ATT_DIR, name);
     try {
-      copyFileSync(p, dest);
-      out.push({ path: dest, name: basename(p), fileName: name });
+      store.saveAttachment(name, readFileSync(p));
+      out.push({ path: `att:${name}`, name: basename(p), fileName: name });
     } catch { /* 单个失败跳过 */ }
   }
   return out;
@@ -744,22 +744,24 @@ const IMAGE_MEDIA = {
   webp: "image/webp", gif: "image/gif",
 };
 
-function loadAttachments(paths) {
+function loadAttachments(tokens) {
   const out = [];
-  for (const p of paths ?? []) {
-    if (!inAttachmentsDir(p)) continue; // 只接受受控目录内的附件
-    try {
-      const ext = p.split(".").pop().toLowerCase();
-      const media = IMAGE_MEDIA[ext];
-      const data = readFileSync(p);
-      if (media) {
-        out.push({ kind: "image", path: p, name: basename(p), mediaType: media, base64: data.toString("base64") });
-      } else {
-        // 非图片附件：以文本形式注入（截断保护）
-        out.push({ kind: "text", path: p, name: basename(p), text: data.toString("utf8").slice(0, 30000) });
-      }
-    } catch (err) {
-      out.push({ kind: "error", name: p, text: err.message });
+  for (const t of tokens ?? []) {
+    const name = typeof t === "string" && t.startsWith("att:") ? t.slice(4) : null;
+    if (!name || !attNameOk(name)) continue; // 只接受入库附件令牌
+    const row = store.getAttachment(name);
+    if (!row) {
+      out.push({ kind: "error", name, text: "附件不存在或已被清理" });
+      continue;
+    }
+    const ext = name.split(".").pop().toLowerCase();
+    const media = IMAGE_MEDIA[ext];
+    const data = Buffer.from(row.data);
+    if (media) {
+      out.push({ kind: "image", path: t, name, mediaType: media, base64: data.toString("base64") });
+    } else {
+      // 非图片附件：以文本形式注入（截断保护）
+      out.push({ kind: "text", path: t, name, text: data.toString("utf8").slice(0, 30000) });
     }
   }
   return out;
@@ -775,7 +777,7 @@ ipcMain.handle("chat:send", async (_e, { id, text, attachmentPaths }) => {
   for (const a of attachments) {
     store.appendBlock(id, {
       kind: "attachment", name: a.name, type: a.kind,
-      fileName: a.path ? basename(a.path) : undefined,
+      fileName: a.kind !== "error" ? a.name : undefined,
     });
   }
   store.appendBlock(id, { kind: "user", text });

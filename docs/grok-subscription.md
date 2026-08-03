@@ -43,16 +43,16 @@
 
 ## 4. 凭据存储与安全说明
 
-- 存储位置：`~/Library/Application Support/xharness/settings.jsonl`
-  （macOS；其他平台 `~/.xharness/gui/`），文件权限 **600**（仅本机当前用户可读）。
+- 存储位置：`~/Library/Application Support/xharness/xharness.db` 的 providers 表
+  （macOS；其他平台 `~/.xharness/gui/`），库文件权限 **600**（仅本机当前用户可读）。
 - **凭据是明文存储的**（oauth 与 API Key 同级敏感）——这是有意决策：ad-hoc 签名
   下用钥匙串/safeStorage 每次启动都会弹授权框。防的是同机其他用户（靠文件权限），
   防不了能读你 home 目录的恶意进程。介意的话请勿在共用电脑上登录。
-- 凭据变更（登录/刷新/退出）会**整文件重写** settings.jsonl，不在历史追加行里
-  残留旧凭据。
+- 凭据变更（登录/刷新/退出）对 providers 行做**单行覆盖写**，旧凭据随行值一起
+  消失，无任何历史残留。
 - 渲染进程拿不到凭据：IPC 下发的供应商信息是脱敏视图（剥离 oauth/apiKey，只带
   `hasKey`）；设置页普通「保存」不会清掉登录态（表单不携带 oauth 字段时沿用已存值）。
-- 登出 = 凭据从 settings.jsonl 移除；卸载应用不会自动删除该目录，需要的话手动删。
+- 登出 = 凭据从 providers 行值中移除；卸载应用不会自动删除该目录，需要的话手动删。
 
 ## 5. API 端点：OpenAI Responses（/v1/responses）
 
@@ -88,13 +88,13 @@ grok 模型只支持 OpenAI Response API，xharness 默认已配好，无需手�
 | 一切正常但没有思考流 | 选了「关闭」或该模型不输出摘要 | 属正常，思考内容只渲染不入历史 |
 
 排错时的自助检查顺序：设置里 Grok 显示「已连接」→ 模型菜单里确实选的是 grok
-模型 → 重发一条（触发自动刷新）→ 重新登录 → 查看数据目录 settings.jsonl 里
-grok 行的 `apiFormat` 是否为 `openai-responses`（§7）。
+模型 → 重发一条（触发自动刷新）→ 重新登录 → 查看库内 providers 表 grok 行的
+`apiFormat` 是否为 `openai-responses`（§7）。
 
 ## 7. 老安装注意：API 格式需手动切一次
 
-2026-08-02 之前的安装，settings.jsonl 里 grok 供应商的 `apiFormat` 是
-`anthropic`（走已弃用的 `/v1/messages`）。xharness 遵循零迁移原则**不会自动改**
+2026-08-02 之前的安装（JSONL 时代的 settings.jsonl，或更早迁入 SQLite 的旧行），
+grok 供应商的 `apiFormat` 是 `anthropic`（走已弃用的 `/v1/messages`）。xharness 遵循零迁移原则**不会自动改**
 你的设置，表现为 grok 请求报错。修复：设置 → Grok 详情 → 「API 格式」下拉改选
 **OpenAI Responses (/v1/responses)** → 保存。新安装无此问题（默认已是该格式）。
 

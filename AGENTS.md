@@ -105,14 +105,17 @@ hook 脚本必须零依赖 Node（打包版靠 `ELECTRON_RUN_AS_NODE=1` 跑 `${N
 
 - `engine.js` 按会话（convId）维护 History/Registry/供应商选择；**每回合开始
   `process.chdir(projectDir)`**——工具相对路径跟会话项目走，不跟 Electron 启动目录。
-- 持久化全部为 **append-only JSONL**，数据目录 `~/Library/Application Support/xharness/`
-  （sessions/、projects.jsonl、settings.jsonl、attachments/）。settings.jsonl 权限 600，
+- 持久化全部为 **SQLite 单库**（`node:sqlite` 内置，零依赖；架构见
+  `docs/storage-sqlite.md`），数据目录 `~/Library/Application Support/xharness/`
+  下的 `xharness.db`（六表：projects/providers/kv/conversations/blocks/attachments，
+  WAL 模式，三个库文件均 chmod 600——侧车不继承主库权限，openDb 时补 chmod）。
   手填 API Key **明文**存储（有意决策：ad-hoc 签名下 safeStorage/钥匙串每次启动弹框，
   已弃用；不要改回钥匙串）。GUI **仅手动填写** API Key，不读环境变量、无 env/manual
   双模式。IPC：providers 列表仍脱敏（key 置空 + `hasKey`）；设置详情经
   `settings:getProviderKey` 按 id 取回明文并回填输入框；保存以表单提交值为准。
 - 安全基线（开源审查后确立，勿回退）：渲染层 markdown 一律过 DOMPurify；CSP 收紧；
-  附件走 `xatt://` 受控协议（只按文件名从 attachments 目录取），禁止裸 `file://`；
+  附件走 `xatt://` 受控协议（按附件名从库内 attachments 表取 BLOB；渲染层持有的
+  引用是 `att:<名>` 不透明令牌，主进程经 `attNameOk` 校验），禁止裸 `file://`；
   projectDir 类 IPC 校验必须为已添加项目。
 - Mermaid 图渲染（规格 GOAL.md §4.10）：main.js 的 mermaidExt 把 ```` ```mermaid ````
   围栏转 `<pre class="mermaid">` 占位块（仅定稿实例；须在 markedHighlight 之后注册），
@@ -128,8 +131,9 @@ hook 脚本必须零依赖 Node（打包版靠 `ELECTRON_RUN_AS_NODE=1` 跑 `${N
   对比度，其余界面色全部由 `mixColor(bg, fg, t)` 推导——**style.css 禁止再写死颜色**，
   一律走 `:root` CSS 变量；深浅切换经 `data-theme` 与 hljs 双 link 的 disabled 互斥；
   半透明侧栏走窗口 vibrancy（设置页打开时下层 `#app` 必须 `visibility:hidden`，
-  否则透明侧栏会透出下层内容重影）；外观持久化为 settings.jsonl 的 `appearance` 事件，
-  rewriteSettings 整文件重写时必须一并带上，否则换 key 会把外观清掉。
+  否则透明侧栏会透出下层内容重影）；外观持久化为库内 kv 表 `appearance` 行
+  （单行覆盖写；旧 JSONL 时代「rewriteSettings 必须带上外观否则换 key 清掉」
+  的坑已随整文件重写一起消失）。
 - Electron 两个易踩的坑：`-webkit-app-region: drag` 区域**不受 z-index 遮挡影响**，
   会吃掉浮层点击（浮层下方不得有 drag 区）；"点击外部关闭菜单"要用 `mousedown` 判定
   （click 阶段若菜单内容已被重建，`contains()` 会误判为外部点击）。
