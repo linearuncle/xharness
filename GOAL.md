@@ -9,6 +9,10 @@
 用 TypeScript 实现一个可在终端交互使用的 coding agent harness（类 Claude Code 的 MVP），
 核心闭环：**模型自主地 读代码 → 改代码 → 跑命令验证**，直到任务完成。
 
+**增量（2026-08-03，§4.15）**：在 harness 之上做 Multica 式 managed agents 平台 MVP
+（bin `xhp`）：workspace → agent → issue 指派 → 真跑 → 可查进度/产物；规格来源
+https://multica.ai/docs/zh，设计见 `docs/design/xhp-platform-mvp.md`。
+
 ## 2. 硬性技术决策（不可由 Worker/Scout 变更）
 
 | 决策项 | 结论 |
@@ -33,34 +37,22 @@
 ```
 xharness/
 ├── GOAL.md              # 本文件
+├── docs/design/         # 设计展开（§4.15 等）；产品决策仍以 GOAL 为准
 ├── state.yaml           # GoalBuddy 任务板（PM 维护）
-├── package.json         # 含 bin: xharness 与 build / test / test:e2e 脚本
+├── package.json         # 含 bin: xharness（+ 规划 bin: xhp）与 build / test / test:e2e
 ├── tsconfig.json
 ├── src/
-│   ├── index.ts         # CLI 入口：REPL、斜杠命令分发
-│   ├── config.ts        # 唯一配置出口 loadConfig()
-│   ├── api/
-│   │   └── client.ts    # 唯一负责：Messages API 流式调用、重试、错误归一，对外输出领域事件
+│   ├── index.ts         # xharness CLI：REPL、斜杠命令分发
+│   ├── config.ts        # 唯一配置出口 loadConfig()（agent-core 侧）
+│   ├── api/             # 线协议（anthropic / responses）；唯一碰 SDK 或原始 SSE
 │   ├── types/
-│   │   ├── messages.ts  # Message / ContentBlock / ToolUse / ToolResult / 领域事件类型
-│   │   └── tools.ts     # Tool 接口：name、description、inputSchema、execute()
-│   ├── agent/
-│   │   ├── loop.ts      # Agent 主循环：只做回合编排
-│   │   ├── prompts.ts   # 系统提示词组装
-│   │   └── compact.ts   # 上下文压缩
+│   ├── agent/           # loop / prompts / compact（将划入 agent-core 边界）
 │   ├── tools/
-│   │   ├── registry.ts  # 只做注册与 schema 导出，不含业务逻辑
-│   │   ├── bash.ts  read.ts  write.ts  edit.ts
-│   │   ├── grep.ts  glob.ts
-│   │   ├── askUserQuestion.ts
-│   │   ├── todoWrite.ts
-│   │   └── skill.ts     # Skill 元工具（T5 才注册进 registry）
 │   ├── skills/
-│   │   └── loader.ts    # 技能扫描/加载/注入
 │   ├── session/
-│   │   └── history.ts   # 消息历史、token 估算（估算器唯一实现处）
-│   └── ui/
-│       └── render.ts    # 流式渲染、工具调用展示
+│   ├── ui/              # 仅 xharness REPL 渲染；platform 禁止依赖
+│   ├── agent-core/      # §4.15：公开 barrel（从核心迁入/划界后的 runtime 库出口）
+│   └── platform/        # §4.15：workspace/issue/run/store/runner + xhp CLI
 └── test/                # vitest 测试（unit 与 e2e 分 project）
 ```
 
@@ -68,10 +60,13 @@ xharness/
 
 - `agent/loop.ts` 只做回合编排：不直接调用 SDK、不读 `process.env`、不解析流事件、不内联压缩逻辑。
 - `api/client.ts` 是唯一接触 `@anthropic-ai/sdk` 与原始流事件的模块，对外输出归一化领域事件：
-  `TextDelta | ToolStart | ToolEnd | Error | TurnEnd`。
+  `TextDelta | ToolStart | ToolEnd | Error | TurnEnd`（OpenAI Responses 路径见 §4.13，
+  仍经同一聚合出口）。
 - `ui/render.ts` 只消费领域事件，禁止解析 Anthropic 原始流。
 - 工具只做副作用与结果返回，不感知会话状态。
 - 除 `config.ts` 外，任何模块禁止读 `process.env`。
+- **§4.15 增量**：`platform` 只依赖 `agent-core` 公开 API；禁止依赖 `ui/*`、禁止
+  直连 SDK/api 私有文件；指派路径必须经 Runner 接口，禁止 CLI 内联调 loop。
 
 ## 4. 功能需求（带验收标准）
 
@@ -458,6 +453,83 @@ description 文本是工具质量的核心，须参照 Claude Code 的措辞风�
 - 验收：GUI 手动选 grok-4.5 后点"新对话"默认即 grok-4.5；重启 GUI 后空态与新
   对话默认仍为上次选择；禁用 grok 供应商后新对话回落 flash。
 
+### 4.15 xhp — Multica 式 Managed Agents 平台 MVP（2026-08-03 立项）
+
+> 设计展开与决策溯源见 `docs/design/xhp-platform-mvp.md`。产品决策以本条目为准。
+> 规格来源：https://multica.ai/docs/zh（能力规格，非文档镜像、非 fork 官方 monorepo）。
+
+- **目标一句话**：在现有 coding harness 之上做 **managed agents 协调平面**——
+  建 workspace、建 agent 配置、用 issue 指派、同步真跑、可查状态/评论/产物；
+  单机 CLI 演示闭环成立即算 MVP。
+- **与 xharness 的关系（硬决策）**：
+  - **引擎下沉 + 平台上盖**：`src/agent-core`（由现有核心迁入/划界：loop/tools/api/
+    config/history/compact…）+ `src/platform`（workspace/issue/run/store/cli）。
+  - MVP 用 **目录边界**，暂不一次切 `packages/*`；platform **禁止**倒依赖 UI/REPL，
+    **禁止** import SDK 或 api 私有实现——只经 agent-core **唯一公开出口**
+    （`src/agent-core/index.ts` 或等价 barrel）。
+  - 现有 `xharness` bin **保留**为 agent-core REPL；平台 bin 为 **`xhp`**。
+  - data dir：`~/Library/Application Support/xharness-platform/`（用户级，不进 git）；
+    README 写明内部工作名、**非** Multica 官方产品。
+  - 合 main 门槛：`npx tsc --noEmit` + `npm test` + `xharness -p` 冒烟绿；feature
+    分支可暂破。GUI CDP 仅触及 renderer 时强制；纯目录搬迁且 public API 不变可只
+    CLI/单测。
+- **MVP 主闭环（唯一主路径）**：
+  `workspace create → agent create → issue create → issue assign → 真 runtime 同步跑完
+  → issue/run 可查 → 工作区有可验证改动 → run log 可 cat`。
+- **演示成功判据**：① 不 mock agent，走真实 agent-core；② 可 cat 的 run log /
+  issue 记录（SQLite 权威 + per-Run 文件 log）；③ agent 至少真实改文件或可验证产物，
+  不能只回聊天。
+- **领域对象（MVP 最小）**：
+  - **Workspace** `{id, name, rootPath}`：`rootPath` 创建时必须已存在（不自动 mkdir）；
+    Run 默认 cwd/可写根 = rootPath；无强制沙箱（YOLO），但记录 rootPath + cwd。
+    平台元数据 **不** 默认写入用户项目目录。
+  - **Agent** 配置档案（非常驻进程）：`{id:uuid, workspaceId, name`（workspace 内唯一）,
+    `systemPrompt?, model?, effort?, runtime:"agent-core", instructionsPath?}`；
+    MVP 默认全套工具；skill 不进关键路径。
+  - **Issue** 状态：`todo | in_progress | done | cancelled`（**无 backlog**）；
+    字段 `title`/`body` 必填，`assigneeAgentId` 可选；body 兼作目标与验收。
+  - **Run** 状态：`queued | running | succeeded | failed | cancelled`；与 Issue
+    **独立记录**；重试 = 新建 Run，不改写旧 Run。
+- **状态机（硬语义）**：
+  1. 创建 Issue → `todo`。
+  2. 指派即跑：创建 Run（`queued`→立刻 `running`），Issue → `in_progress`。
+  3. Run 成功 → Run `succeeded`，Issue `done`；系统评论 + artifacts。
+  4. Run 失败/SIGINT 取消 → Run `failed`/`cancelled`，Issue **回 `todo`**。
+  5. 系统评论 **仅** 生命周期摘要；tool 明细只进 run log。
+- **执行拓扑**：
+  - **可替换 Runner 接口**；MVP 仅 `InProcessRunner`（同进程 import agent-core）。
+  - 禁止 CLI「指派 = 直接调 loop」：必须 `createRun → runner.execute → 回写`。
+  - 每 workspace 串行；MVP **全局同时仅 1 Run**（整个 xhp 进程）。
+  - 流式：stdout 与 log 双写；SIGINT 必做。
+  - 每 Run **新会话**；模型输入用 **结构化任务包**（目标/验收/约束/rootPath/issue id）；
+    MVP 不做上次失败摘要注入。
+- **配置与密钥**：复用 agent-core `loadConfig()`/env；platform 不自建 key store；
+  Agent 的 model/effort 可覆盖选模，不承载 secret；**缺 key 不建 Run**（CLI 非零退出）；
+  key 不入 SQLite/log；CRUD 不依赖 key。
+- **CLI 命令面（bin: `xhp`）**：
+  - `workspace create|list`
+  - `agent create|list`（`--workspace`，可选 model/effort/system-prompt）
+  - `issue create|list|show|assign|cancel`（`assign` 立即同步 Run）
+  - `run show|log`
+  - id 与 name 双引用（agent name 仅 workspace 内唯一）。
+  - **不要** MVP：TUI、REPL 内指派。
+- **明确不做（平台 MVP，Worker 不得顺手做）**：Web/桌面平台 UI、多机 daemon、
+  skill 复用闭环、定时触发、多人/SSO、VCS issue 同步、多 agent 同 issue 协作、
+  计费看板、第三方 runtime 市场、人在回路审批、fork Multica 代码树、文档站镜像。
+- **建议落地顺序**（PM 拆任务参考，非严格 tranche 名）：
+  1. agent-core 划界与公开 session API（cwd/配置/abort/onEvent）；
+  2. Store + 领域类型与状态机单测；
+  3. InProcessRunner + 任务包 + SIGINT + log；
+  4. xhp CLI 接通 + 黄金路径 E2E；
+  5. README 片段（风险、env、与 Multica 无关声明）。
+- **验收**：
+  1. 在已存在临时目录上完成黄金路径：assign 后 issue `done`，目标文件被真实修改，
+     `xhp run log` 可输出可读内容；
+  2. SIGINT 中途取消 → Run `cancelled`、Issue `todo`，可再次 assign；
+  3. 缺 `ANTHROPIC_API_KEY` 时 assign 失败且 **不** 新建 Run、Issue 仍 `todo`；
+  4. platform 模块依赖图不含 `ui/*` 与 `@anthropic-ai/sdk`；
+  5. `tsc --noEmit` + `npm test` 绿；既有 `xharness -p` 冒烟仍可用。
+
 ## 5. Tranche 划分（PM 按序推进，每个 tranche 结束交 Judge 审）
 
 | Tranche | 内容 | 出口标准 |
@@ -469,6 +541,7 @@ description 文本是工具质量的核心，须参照 Claude Code 的措辞风�
 | T4 上下文 | F4 compact（自动+手动）、F12 项目指令文件（接入 F3 注入钩子） | 超长会话压缩后可继续 |
 | T5 技能 | F13-F16 Skills 系统 + Skill 元工具注册 + 内置命令 | 自定义技能可被 `/name` 和模型两种方式触发 |
 | T7 thinking | F19 思考档位（none/low/high/max）与思考内容流式输出 | /effort 四档可切换；high 下可见暗色思考流，none 下无；单测+E2E 过 |
+| T8 xhp 平台 MVP | §4.15：agent-core 划界 + platform Store/Runner + `xhp` CLI 黄金路径 | 黄金路径 E2E 过；SIGINT/缺 key 语义过；分层依赖图过；xharness 冒烟仍绿 |
 
 ## 6. 验证方案
 
@@ -514,16 +587,19 @@ npm run test:e2e
 
 ## 7. 明确不做（Worker 不得顺手实现，发现需求缺口升级 Judge）
 
-- 子代理 / 多代理编排
+- 子代理 / 多代理编排（**注**：§4.15 的「多 agent 同 issue 协作」同属不做；
+  单 assignee 指派 + 串行 Run 不是多代理编排）
 - MCP 协议
 - settings.json 配置体系（Hooks 已由 §4.6 插件系统承载，2026-08-02 解除；
   插件之外不做通用 hooks 配置）
 - 权限确认模式（YOLO 之外）
 - Plan 模式、git worktree 隔离
-- 持久记忆、Artifact、定时任务
-- OpenAI 等其他 provider 格式
-- markdown 终端渲染、主题、TUI 框架
+- 持久记忆、Artifact、定时任务（§4.15 平台定时触发同样不做）
+- OpenAI Chat Completions 等未立项格式（**OpenAI Response API 已由 §4.13 立项**）
+- markdown 终端渲染、主题、TUI 框架（§4.15 `xhp` 亦不要 TUI）
 - 运行时沙箱、路径约束、命令黑名单（YOLO 有意为之，见 §2；测试红线见 §6.3 是测试层的事）
+- fork 官方 Multica monorepo、文档站镜像、平台 Web UI / 多机 daemon / skill 市场
+  （详见 §4.15 明确不做表）
 
 ## 8. 完成标准（Judge 审定整个 goal）
 
