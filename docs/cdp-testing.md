@@ -15,8 +15,8 @@ GUI 测试默认使用 dev 实例，不要求每次打包。CDP 由 `gui/scripts
 
 1. 先在 `docs/gui-test-cases/` 写测试用例：列出标准冒烟、主成功路径、一个关键边界或回归路径。
 2. 跑代码级检查：按改动范围选择 `npm test`、`npx tsc --noEmit` 等。
-3. 按需 build：只有改到 `src/`、`dist/` 依赖路径或 GUI 引擎依赖时，才必须在根目录执行
-   `npm run build`。纯 `gui/renderer/`、样式、文档改动可以跳过，并在报告里说明。
+3. 重启 GUI：执行 `npm run gui:dev -- restart`。该脚本会先跑 `npm run build`，确保
+   `dist/` 与 `src/` 同步。
 4. 重启 GUI dev 实例，不能复用改动前的旧进程。
 5. 跑第 3 节快速标准冒烟。
 6. 按测试用例跑本次需求专项验证。
@@ -29,9 +29,6 @@ GUI 测试默认使用 dev 实例，不要求每次打包。CDP 由 `gui/scripts
 单实例测试从仓库根目录执行：
 
 ```bash
-# 仅当本次改动涉及 src/ 或 dist 依赖时执行
-npm run build
-
 npm run gui:dev -- restart
 npm run gui:dev -- status
 ```

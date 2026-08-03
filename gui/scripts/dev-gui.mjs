@@ -23,6 +23,7 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const guiDir = resolve(here, "..");
+const rootDir = resolve(guiDir, "..");
 const appPath = join(guiDir, "node_modules", "electron", "dist", "xharness.app");
 const defaultDataDir =
   process.platform === "darwin"
@@ -133,6 +134,11 @@ function writeCdpLog(cdp) {
   writeFileSync(join(dataDir, "cdp.log"), `DevTools listening on ${cdp.ws}\n`);
 }
 
+function buildRoot() {
+  console.log("正在构建 src/ -> dist/ ...");
+  execFileSync("npm", ["run", "build"], { cwd: rootDir, stdio: "inherit" });
+}
+
 async function status() {
   const pids = findMainPids();
   const cdp = await readCdpInfo();
@@ -147,13 +153,14 @@ async function status() {
   return 0;
 }
 
-async function start() {
+async function start({ build = true } = {}) {
   mkdirSync(dataDir, { recursive: true });
   const existing = findMainPids();
   if (existing.length) {
     console.log("dev GUI 已在运行。");
     return status();
   }
+  if (build) buildRoot();
   if (!existsSync(appPath)) {
     console.error(`找不到 Electron app: ${appPath}`);
     console.error("请先在 gui/ 安装依赖。");
@@ -230,7 +237,8 @@ if (command === "status") exitCode = await status();
 else if (command === "start") exitCode = await start();
 else if (command === "stop") exitCode = await stop();
 else if (command === "restart") {
+  buildRoot();
   const stopped = await stop();
-  exitCode = stopped === 0 ? await start() : stopped;
+  exitCode = stopped === 0 ? await start({ build: false }) : stopped;
 }
 process.exit(exitCode);
