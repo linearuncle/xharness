@@ -684,7 +684,11 @@ ipcMain.handle("chat:answer", (_e, { id, text }) => engine.answer(id, text));
 
 ipcMain.handle("chat:stop", (_e, id) => engine.stop(id));
 
-ipcMain.handle("block:append", (_e, { id, block }) => store.appendBlock(id, block));
+ipcMain.handle("block:append", (_e, { id, block }) => {
+  store.appendBlock(id, block);
+  // 内容变更会抬升 updatedAt，推侧栏以按最近活动重排
+  win?.webContents.send("sidebar:update", store.sidebarData());
+});
 
 // 剪贴板粘贴的图片：落盘到受控附件目录
 ipcMain.handle("attach:save-clipboard", (_e, { base64, ext }) => {

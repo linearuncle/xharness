@@ -116,10 +116,13 @@ function replaySession(id) {
   const rows = readLines(sessFile(id));
   if (!rows.length || rows[0].kind !== "meta") return null;
   const meta = rows[0];
+  const createdAt = meta.createdAt ?? 0;
   const c = {
     projectDir: meta.projectDir,
     title: meta.title ?? "新对话",
-    createdAt: meta.createdAt ?? 0,
+    createdAt,
+    // 最近活动时间：重放时取末条事件 ts，缺省回退 createdAt（旧数据无 ts 时保持创建序）
+    updatedAt: createdAt,
     blocks: [],
   };
   for (const r of rows.slice(1)) {
@@ -130,6 +133,7 @@ function replaySession(id) {
     } else {
       c.blocks.push(r);
     }
+    if (typeof r.ts === "number") c.updatedAt = r.ts;
   }
   return c;
 }
@@ -306,11 +310,16 @@ export function addProject(dir) {
   }
 }
 
+function touchConversation(c, ts = Date.now()) {
+  c.updatedAt = ts;
+  return ts;
+}
+
 export function newConversation(projectDir) {
   const id = `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const createdAt = Date.now();
   conversations[id] = {
-    projectDir, title: "新对话", createdAt, blocks: [],
+    projectDir, title: "新对话", createdAt, updatedAt: createdAt, blocks: [],
   };
   writeFileSync(sessFile(id), line({ kind: "meta", id, projectDir, title: "新对话", createdAt }));
   return id;
@@ -324,7 +333,8 @@ export function setTitle(id, title) {
   const c = conversations[id];
   if (c && c.title === "新对话") {
     c.title = title;
-    appendLine(sessFile(id), { kind: "meta_update", title, ts: Date.now() });
+    const ts = touchConversation(c);
+    appendLine(sessFile(id), { kind: "meta_update", title, ts });
     return true;
   }
   return false;
@@ -334,7 +344,8 @@ export function appendBlock(id, block) {
   const c = conversations[id];
   if (c) {
     c.blocks.push(block);
-    appendLine(sessFile(id), { ...block, ts: Date.now() });
+    const ts = touchConversation(c);
+    appendLine(sessFile(id), { ...block, ts });
   }
 }
 
@@ -342,7 +353,8 @@ export function clearBlocks(id) {
   const c = conversations[id];
   if (c) {
     c.blocks = [];
-    appendLine(sessFile(id), { kind: "clear", ts: Date.now() });
+    const ts = touchConversation(c);
+    appendLine(sessFile(id), { kind: "clear", ts });
   }
 }
 
@@ -352,8 +364,10 @@ export function sidebarData() {
     title: c.title,
     projectDir: c.projectDir,
     createdAt: c.createdAt,
+    updatedAt: c.updatedAt ?? c.createdAt,
   }));
-  convs.sort((a, b) => a.createdAt - b.createdAt);
+  // 最近有内容/改动的对话靠前；新建对话 updatedAt=createdAt，自然置顶
+  convs.sort((a, b) => b.updatedAt - a.updatedAt || b.createdAt - a.createdAt);
   return {
     projects: projects.map((p) => ({
       dir: p.dir,
