@@ -36,6 +36,9 @@ const DEFAULT_GENERAL = {
   compactionStrategy: "classic",
   showSessionStats: true,
   disabledSkills: [], // 技能名列表；禁用只影响 GUI 会话装载，不改动技能文件
+  // 最近一次会话模型选择 {providerId, model, effort}：作为新会话默认（记住最近一次选择），
+  // null = 从未用过，回落安装默认 flash + high。经 setGeneral 深合并，换 key 整文件重写时一并保留
+  lastChoice: null,
 };
 
 // 外观默认值：浅/深两套主题独立配置，mode 决定生效哪套（system 跟随系统）

@@ -441,6 +441,23 @@ description 文本是工具质量的核心，须参照 Claude Code 的措辞风�
   curl 实测 api.x.ai /v1/responses 流式事件与 reasoning 档位；GUI grok 全流程
   冒烟（登录→流式→工具回合→统计→/compact）。
 
+### 4.14 新会话默认模型 = 最近一次选择（2026-08-03 变更）
+
+- **动机**：GUI 模型选择是会话内运行时状态（只存内存），新对话/重启后一律回落
+  安装默认 `deepseek-v4-flash + high`；用户在 grok 与 deepseek 间切换时，每次新
+  对话都得重选。
+- **方案**：`settings.jsonl` 的 general 增加 `lastChoice: {providerId, model, effort}`，
+  经既有 `setGeneral` 深合并落盘（append-only；换 key 整文件重写时随 general 一并
+  保留）。记录时机：① 会话内切换（`engine.setModelChoice`/`setEffort`，含首条消息
+  发送时渲染层应用选择）；② 空态（无会话）改模型/推理强度，走新增
+  `choice:setLast` IPC，不绑定会话。
+- **读取**：`engine.defaultChoice()` 与渲染层 `defaultChoice()` 均改为优先取
+  `lastChoice`，校验供应商 enabled 且模型在列（被删/禁用/模型下架则回落安装默认）；
+  会话隔离语义不变——**旧会话的模型选择仍不持久化**（meta 行不写模型），重开旧
+  会话仍回落"最近一次选择"。
+- 验收：GUI 手动选 grok-4.5 后点"新对话"默认即 grok-4.5；重启 GUI 后空态与新
+  对话默认仍为上次选择；禁用 grok 供应商后新对话回落 flash。
+
 ## 5. Tranche 划分（PM 按序推进，每个 tranche 结束交 Judge 审）
 
 | Tranche | 内容 | 出口标准 |

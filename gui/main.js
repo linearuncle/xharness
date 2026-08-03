@@ -638,6 +638,21 @@ ipcMain.handle("conv:setEffort", (_e, { id, effort }) => {
   return engine.sessionMeta(id);
 });
 
+// 空态（无会话打开）时用户改模型/推理强度：只记"最近一次选择"，作为后续新会话默认，
+// 不绑定任何会话；渲染层发送首条消息时仍会经 conv:setModelChoice/setEffort 应用到实际会话
+ipcMain.handle("choice:setLast", (_e, { providerId, model, effort }) => {
+  // 增量合并：缺的字段沿用已存值，避免单字段更新把 lastChoice 写残
+  const cur = store.getGeneral().lastChoice ?? {};
+  store.setGeneral({
+    lastChoice: {
+      providerId: typeof providerId === "string" ? providerId : cur.providerId ?? null,
+      model: typeof model === "string" ? model : cur.model ?? null,
+      effort: typeof effort === "string" ? effort : cur.effort ?? null,
+    },
+  });
+  return store.getGeneral().lastChoice;
+});
+
 ipcMain.handle("skills:list", (_e, projectDir) =>
   isKnownProject(projectDir) ? engine.listSkills(projectDir) : []
 );

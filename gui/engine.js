@@ -114,6 +114,19 @@ function enabledProviders() {
 }
 
 export function defaultChoice() {
+  // 最近一次选择优先（用户上次用过的模型/推理强度作为新会话默认）；
+  // 供应商被删/禁用/模型下架时校验失败，回落安装默认
+  const last = store.getGeneral().lastChoice;
+  if (last?.providerId && last?.model) {
+    const lp = enabledProviders().find((x) => x.id === last.providerId);
+    if (lp && lp.models.some((m) => m.id === last.model)) {
+      return {
+        providerId: lp.id,
+        model: last.model,
+        effort: last.effort || DEFAULT_EFFORT,
+      };
+    }
+  }
   const p = enabledProviders()[0];
   if (!p) return { providerId: null, model: null, effort: DEFAULT_EFFORT };
   const preferred = p.models.find((m) => m.id === DEFAULT_MODEL_ID);
@@ -323,11 +336,23 @@ export function runningConvIds() {
   return [...sessions.entries()].filter(([, s]) => s.running).map(([id]) => id);
 }
 
+// 记录最近一次会话模型选择（含空态选择，见 choice:setLast IPC），作为新会话默认
+function rememberLastChoice(s) {
+  store.setGeneral({
+    lastChoice: {
+      providerId: s.providerId,
+      model: s.model,
+      effort: s.effort || DEFAULT_EFFORT,
+    },
+  });
+}
+
 export function setModelChoice(convId, providerId, model) {
   const s = sessions.get(convId);
   if (s) {
     s.providerId = providerId;
     s.model = model;
+    rememberLastChoice(s);
   }
 }
 
@@ -336,6 +361,7 @@ export function setEffort(convId, effort) {
   if (!s) return;
   // ""（默认(高)）与未设都落成产品默认 high；用户选 none/low/high/max 原样保留
   s.effort = effort || DEFAULT_EFFORT;
+  rememberLastChoice(s);
 }
 
 export function sessionMeta(convId) {

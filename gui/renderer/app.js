@@ -46,8 +46,20 @@ function providerStatus(p) {
   return { cls: " on", label: "已启用", dot: " on" };
 }
 
-/** 空态/新会话默认：优先 deepseek-v4-flash + high；用户改过后写在会话 meta 里 */
+/** 空态/新会话默认：优先最近一次选择（S.general.lastChoice，boot 时取）；未用过快回落
+ *  deepseek-v4-flash + high；用户改过后写在会话 meta 里 */
 function defaultChoice() {
+  const last = S.general?.lastChoice;
+  if (last?.providerId && last?.model) {
+    const lp = S.providers.find((x) => x.id === last.providerId && x.enabled && x.models?.length);
+    if (lp && lp.models.some((m) => m.id === last.model)) {
+      return {
+        providerId: lp.id,
+        model: last.model,
+        effort: last.effort || DEFAULT_EFFORT,
+      };
+    }
+  }
   const p = S.providers.find((x) => x.enabled && x.models?.length);
   if (!p) return { providerId: null, model: "", effort: DEFAULT_EFFORT };
   const preferred = p.models.find((m) => m.id === DEFAULT_MODEL_ID);
@@ -959,7 +971,11 @@ function renderModelMenuRoot() {
   row("推理强度", EFFORT_LABEL[S.meta.effort ?? ""] ?? "默认", () =>
     renderModelMenuOptions("推理强度", S.efforts.map((x) => ({ label: x.label, value: x.value, cur: (S.meta.effort ?? "") === x.value })), async (v) => {
       if (S.activeConv) S.meta = await api.setEffort(S.activeConv, S.activeProject, v);
-      else S.meta.effort = v;
+      else {
+        S.meta.effort = v;
+        // 空态选择同样记入"最近一次选择"，让新对话默认跟随
+        api.setLastChoice(S.meta.providerId, S.meta.model, v);
+      }
       updateModelLabel();
     })
   );
@@ -987,6 +1003,8 @@ function renderModelOptions() {
         } else {
           S.meta.providerId = p.id;
           S.meta.model = mod.id;
+          // 空态选择同样记入"最近一次选择"，让新对话默认跟随
+          api.setLastChoice(p.id, mod.id, S.meta.effort);
         }
         updateModelLabel();
         toggleModelMenu(false);
@@ -1037,10 +1055,11 @@ async function boot() {
   S.efforts = st.efforts;
   S.sidebar = st.sidebar;
   S.runningConvs = new Set(st.runningConvs ?? []);
+  // 先取 general（含 lastChoice）再算默认选择，否则空态默认永远回落 flash
+  S.general = st.general;
   S.meta = { ...defaultChoice() };
   // 外观：启动即应用，之后跟随系统深浅变化
   S.appearance = st.appearance;
-  S.general = st.general;
   S.compactionStrategies = st.compactionStrategies ?? [];
   Appearance.init(S.appearance, (a) => (S.appearance = a));
   Theme.apply(S.appearance);

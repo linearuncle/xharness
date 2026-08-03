@@ -37,6 +37,9 @@ contextBridge.exposeInMainWorld("api", {
   deleteProvider: (id) => ipcRenderer.invoke("settings:delete", id),
   setEffort: (id, projectDir, effort) =>
     ipcRenderer.invoke("conv:setEffort", { id, projectDir, effort }),
+  // 空态（无会话）改模型/推理强度：只记最近一次选择，作为新会话默认
+  setLastChoice: (providerId, model, effort) =>
+    ipcRenderer.invoke("choice:setLast", { providerId, model, effort }),
   listSkills: (projectDir) => ipcRenderer.invoke("skills:list", projectDir),
   listSkillsSettings: () => ipcRenderer.invoke("skillsSettings:list"),
   setSkillEnabled: (name, enabled) =>
