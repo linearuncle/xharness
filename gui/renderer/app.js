@@ -26,7 +26,11 @@ const S = {
   statsByConv: {}, // convId -> 会话统计（engine stats 事件）
   runningConvs: new Set(), // 回合未结束的会话 id（侧栏圆形 loading 指示）
   collapsedProjects: new Set(), // 侧栏折叠的项目 dir（仅内存态，不持久化）
+  expandedProjects: new Set(), // 会话预览已展开的项目 dir（仅内存态，不持久化）
 };
+
+/** 侧栏每个项目默认预览的会话条数，超出显示「展开显示」 */
+const SB_CONV_PREVIEW = 5;
 
 const DEFAULT_MODEL_ID = "deepseek-v4-flash";
 const DEFAULT_EFFORT = "high";
@@ -88,7 +92,36 @@ function renderSidebar() {
       (p.conversations.length ? `<span class="sb-count">${p.conversations.length}</span>` : "");
     row.onclick = () => onProjectClick(p.dir);
     wrap.appendChild(row);
-    if (!collapsed) for (const c of p.conversations) wrap.appendChild(convRow(c));
+    if (collapsed) continue;
+
+    const convs = p.conversations;
+    // 激活会话落在预览窗外时自动展开，避免高亮行被藏住
+    if (
+      S.activeConv &&
+      !S.expandedProjects.has(p.dir) &&
+      convs.length > SB_CONV_PREVIEW &&
+      convs.findIndex((c) => c.id === S.activeConv) >= SB_CONV_PREVIEW
+    ) {
+      S.expandedProjects.add(p.dir);
+    }
+    const expanded = S.expandedProjects.has(p.dir);
+    const showAll = expanded || convs.length <= SB_CONV_PREVIEW;
+    const visible = showAll ? convs : convs.slice(0, SB_CONV_PREVIEW);
+    for (const c of visible) wrap.appendChild(convRow(c));
+
+    // 超过预览条数时给出展开/收起入口
+    if (convs.length > SB_CONV_PREVIEW) {
+      const more = document.createElement("div");
+      more.className = "sb-more";
+      more.textContent = expanded ? "收起" : "展开显示";
+      more.onclick = (e) => {
+        e.stopPropagation();
+        if (expanded) S.expandedProjects.delete(p.dir);
+        else S.expandedProjects.add(p.dir);
+        renderSidebar();
+      };
+      wrap.appendChild(more);
+    }
   }
 }
 
