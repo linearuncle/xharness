@@ -77,6 +77,18 @@ console.log("3/5 复制应用骨架 …");
 execFileSync("ditto", [APP_SRC, APP_OUT]);
 rmSync(join(APP_OUT, "Contents", "Resources", "default_app.asar"), { force: true });
 
+// About 菜单读的是 Info.plist 的 CFBundleShortVersionString；骨架默认是 Electron 版本号
+const plist = join(APP_OUT, "Contents", "Info.plist");
+const setPlist = (key, value) => {
+  try {
+    execFileSync("/usr/libexec/PlistBuddy", ["-c", `Set :${key} ${value}`, plist]);
+  } catch {
+    execFileSync("/usr/libexec/PlistBuddy", ["-c", `Add :${key} string ${value}`, plist]);
+  }
+};
+setPlist("CFBundleShortVersionString", guiPkg.version);
+setPlist("CFBundleVersion", guiPkg.version);
+
 console.log("4/5 注入应用代码 …");
 cpSync(STAGING, join(APP_OUT, "Contents", "Resources", "app"), { recursive: true });
 rmSync(STAGING, { recursive: true, force: true });
