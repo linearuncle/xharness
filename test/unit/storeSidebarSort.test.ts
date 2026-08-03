@@ -66,3 +66,29 @@ describe("sidebar 对话按 updatedAt 降序", () => {
     expect(convs[0].updatedAt).toBeGreaterThan(convs[1].updatedAt);
   });
 });
+
+describe("sidebar 项目按添加时间最新在前", () => {
+  let dataDir: string;
+
+  beforeEach(() => {
+    dataDir = mkdtempSync(join(tmpdir(), "xh-store-"));
+  });
+
+  afterEach(() => {
+    rmSync(dataDir, { recursive: true, force: true });
+  });
+
+  it("后添加的项目排在前面；重放后顺序不变", async () => {
+    const store = await loadStore(dataDir);
+    store.load();
+    store.addProject("/tmp/proj-old");
+    store.addProject("/tmp/proj-new");
+
+    let dirs = store.sidebarData().projects.map((p: { dir: string }) => p.dir);
+    expect(dirs).toEqual(["/tmp/proj-new", "/tmp/proj-old"]);
+
+    store.load();
+    dirs = store.sidebarData().projects.map((p: { dir: string }) => p.dir);
+    expect(dirs).toEqual(["/tmp/proj-new", "/tmp/proj-old"]);
+  });
+});

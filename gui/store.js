@@ -142,9 +142,10 @@ export function load() {
   mkdirSync(SESS_DIR, { recursive: true });
 
   projects = [];
+  // 最新添加的项目在前：重放时对 add 做 unshift（jsonl 时间正序 → 末条最前）
   for (const r of readLines(PROJECTS_FILE)) {
     if (r.op === "add" && r.dir && !projects.some((p) => p.dir === r.dir))
-      projects.push({ dir: r.dir });
+      projects.unshift({ dir: r.dir });
     if (r.op === "remove")
       projects = projects.filter((p) => p.dir !== r.dir);
   }
@@ -305,7 +306,7 @@ export function deleteProvider(id) {
 
 export function addProject(dir) {
   if (!projects.some((p) => p.dir === dir)) {
-    projects.push({ dir });
+    projects.unshift({ dir }); // 最新添加置顶
     appendLine(PROJECTS_FILE, { op: "add", dir, ts: Date.now() });
   }
 }

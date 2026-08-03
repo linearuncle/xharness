@@ -180,11 +180,13 @@ async function newConversation() {
 }
 
 async function addProject() {
-  S.sidebar = await api.addProject();
+  const r = await api.addProject();
+  S.sidebar = r.sidebar;
   renderSidebar();
-  const last = S.sidebar.projects[S.sidebar.projects.length - 1];
-  if (last && !S.activeProject) await selectProject(last.dir);
-  else if (last) S.activeProject = last.dir;
+  // 取消对话框时 dir 为 null，不改当前选中
+  if (!r.dir) return;
+  if (!S.activeProject) await selectProject(r.dir);
+  else S.activeProject = r.dir;
 }
 
 async function openConversation(id) {

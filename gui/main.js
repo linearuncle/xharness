@@ -596,8 +596,9 @@ ipcMain.handle("project:add", async () => {
   const r = await dialog.showOpenDialog(win, {
     properties: ["openDirectory", "createDirectory"],
   });
-  if (!r.canceled && r.filePaths[0]) store.addProject(r.filePaths[0]);
-  return store.sidebarData();
+  const dir = !r.canceled ? r.filePaths[0] : null;
+  if (dir) store.addProject(dir);
+  return { sidebar: store.sidebarData(), dir: dir || null };
 });
 
 ipcMain.handle("conv:new", (_e, projectDir) => {
