@@ -6,11 +6,14 @@
 GUI 测试默认使用 dev 实例，不要求每次打包。CDP 由 `gui/scripts/cdp-eval.mjs` 驱动，
 可以直接检查 DOM、触发交互和调用 preload 暴露的 `api`。
 
+默认尽量使用真实数据目录测试，以覆盖真实项目、会话和设置组合。只有多 worktree 并发、
+首启、破坏性场景，或需要避免污染真实数据时，才使用第 4 节隔离目录。
+
 ## 1. 完成门禁
 
 宣布 GUI 需求完成前，按这个顺序走：
 
-1. 先写测试用例：列出标准冒烟、主成功路径、一个关键边界或回归路径。
+1. 先在 `docs/gui-test-cases/` 写测试用例：列出标准冒烟、主成功路径、一个关键边界或回归路径。
 2. 跑代码级检查：按改动范围选择 `npm test`、`npx tsc --noEmit` 等。
 3. 按需 build：只有改到 `src/`、`dist/` 依赖路径或 GUI 引擎依赖时，才必须在根目录执行
    `npm run build`。纯 `gui/renderer/`、样式、文档改动可以跳过，并在报告里说明。
@@ -93,6 +96,36 @@ node gui/scripts/cdp-eval.mjs --data-dir "$TEST_DATA_DIR" --list
 node gui/scripts/cdp-eval.mjs --data-dir "$TEST_DATA_DIR" 'document.title'
 ```
 
+隔离目录默认没有供应商 key。若专项测试需要真实模型调用，建议从环境变量预置 DeepSeek key
+到隔离目录的 `settings.jsonl`，再启动 GUI。GUI 仍只读取设置文件，不在运行时读取环境变量：
+
+```bash
+TEST_DATA_DIR="$PWD/.xhtest-agent-name"
+TEST_DATA_DIR="$TEST_DATA_DIR" DEEPSEEK_API_KEY="$DEEPSEEK_API_KEY" node -e '
+const { mkdirSync, writeFileSync } = require("node:fs");
+const { join } = require("node:path");
+const dir = process.env.TEST_DATA_DIR;
+const key = process.env.DEEPSEEK_API_KEY;
+if (!dir) throw new Error("TEST_DATA_DIR is required");
+if (!key) throw new Error("DEEPSEEK_API_KEY is required");
+mkdirSync(dir, { recursive: true });
+const provider = {
+  id: "deepseek",
+  name: "DeepSeek",
+  baseUrl: "https://api.deepseek.com/anthropic",
+  apiFormat: "anthropic",
+  apiKey: key,
+  enabled: true,
+  builtin: true,
+  models: [
+    { id: "deepseek-v4-flash", contextWindow: 1000000 },
+    { id: "deepseek-v4-pro", contextWindow: 1000000 }
+  ]
+};
+writeFileSync(join(dir, "settings.jsonl"), JSON.stringify({ op: "upsert", provider, ts: Date.now() }) + "\n", { mode: 0o600 });
+'
+```
+
 并发场景禁止执行宽泛 `pkill -f "MacOS/xharness"`。只结束当前 worktree 实例时，用：
 
 ```bash
@@ -101,7 +134,7 @@ pkill -f "$PWD/gui/node_modules/electron/dist/xharness.app"
 
 ## 5. 需求专项
 
-标准冒烟不证明需求完成。执行前先写测试用例，每条用例写清楚：
+标准冒烟不证明需求完成。执行前先在 `docs/gui-test-cases/` 写测试用例，每条用例写清楚：
 
 - 名称、前置、操作、断言、证据。
 - 至少覆盖主成功路径，以及一个关键边界或回归路径。
